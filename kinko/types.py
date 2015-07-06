@@ -17,8 +17,8 @@ class Func(object):
             return cls
 
         def __repr__(cls):
-            return 'Func[{!r}, {!r}]'\
-                .format(cls.__args__, cls.__result__)
+            return '{}[{!r}, {!r}]'.format(cls.__name__, cls.__args__,
+                                           cls.__result__)
 
 
 class VarArgs(object):
@@ -30,8 +30,7 @@ class VarArgs(object):
             return cls
 
         def __repr__(cls):
-            return 'VarArgs[{!r}]'\
-                .format(cls.__arg_type__)
+            return '{}[{!r}]'.format(cls.__name__, cls.__arg_type__)
 
 
 class NamedArg(object):
@@ -43,8 +42,8 @@ class NamedArg(object):
             return cls
 
         def __repr__(cls):
-            return 'NamedArg[{}={!r}]'\
-                .format(cls.__arg_name__, cls.__arg_type__)
+            return '{}[{}={!r}]'.format(cls.__name__, cls.__arg_name__,
+                                        cls.__arg_type__)
 
 
 StringType = unicode
@@ -64,4 +63,12 @@ class SymbolType(object):
 
 
 class CollectionType(object):
-    pass
+    class __metaclass__(TypingMeta):
+
+        def __new__(typ, name, bases, namespace, item_type=None):
+            cls = TypingMeta.__new__(typ, name, bases, namespace)
+            cls.__item_type__ = item_type
+            return cls
+
+        def __repr__(cls):
+            return '{}[{!r}]'.format(cls.__name__, cls.__item_type__)
