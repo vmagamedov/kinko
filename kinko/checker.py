@@ -1,28 +1,69 @@
 from .scope import Scope
 from .nodes import Tuple
-from .types import Func, OutputType, SymbolType, CollectionType
-from .types import VarArgs, DictType, StringType
+from .types import *
+
+
+def split_args(args):
+    # TODO: implement
+    return [], {}
+
+
+def check_arg(value, type_, scope):
+    if type_ != ExpressionType:
+        value, scope = check(value, scope)
+    check_type(value, type_)
+    return value, scope
 
 
 def check_args(args, ftype, scope):
-    # TODO: implement
-    return args, scope
+    args_, kwargs_ = split_args(args)
+    checked_args, checked_kwargs = [], {}
+
+    for arg in ftype.__args__:
+        if isinstance(arg, NamedArgMeta):
+            try:
+                value = kwargs_.pop(arg.__arg_name__)
+            except KeyError:
+                raise TypeError('Missing named argument: {!r}'.format(arg))
+            else:
+                value, scope = check_arg(value, arg.__arg_type__, scope)
+                checked_kwargs[arg.__arg_name__] = value
+        elif isinstance(arg, VarArgsMeta):
+            varargs = []
+            for item in args_:
+                item, scope = check_arg(item, arg.__arg_type__, scope)
+                varargs.append(item)
+            checked_args.append(varargs)
+            args_ = []
+        else:
+            try:
+                value = args_.pop(0)
+            except IndexError:
+                raise TypeError('Missing positional argument: {!r}'.format(arg))
+            else:
+                value, scope = check_arg(value, arg, scope)
+                checked_args.append(value)
+
+    if args_ or kwargs_:
+        raise TypeError('More arguments than expected')
+
+    return checked_args, checked_kwargs, scope
 
 
-def check(expr, scope):
-    if isinstance(expr, Tuple):
-        if not expr.values:
+def check(node, scope):
+    if isinstance(node, Tuple):
+        if not node.values:
             raise TypeError('Empty tuple')
-        name_sym, rest = expr.values[0], expr.values[1:]
+        name_sym, rest = node.values[0], node.values[1:]
         func = scope.lookup(name_sym)
-        if not isinstance(func, type(Func)):
+        if not isinstance(func, FuncMeta):
             raise TypeError('Not a Func type')
         return check_expr(name_sym.name, func, rest, scope)
-    raise TypeError('Unknown type: {!r}'.format(expr))
+    raise TypeError('Unknown type: {!r}'.format(node))
 
 
 def check_expr(fname, ftype, args, scope):
-    args, scope = check_args(args, ftype, scope)
+    args, kwargs, scope = check_args(args, ftype, scope)
     if fname == 'each':  # [var collection *body]
         var, col, body = args
         body_scope = Scope({var: col.__item_type__}, parent=scope)
@@ -55,6 +96,12 @@ def check_type(var, expected_type):
 
 
 global_scope = Scope({
-    'div': Func[[DictType[StringType], VarArgs[OutputType]], OutputType],
-    'each': Func[[SymbolType, CollectionType, VarArgs[OutputType]], OutputType],
+    'div': Func[
+        [DictType[StringType, StringType], VarArgs[OutputType]],
+        OutputType,
+    ],
+    'each': Func[
+        [SymbolType, CollectionType, VarArgs[OutputType]],
+        OutputType,
+    ],
 }, None)

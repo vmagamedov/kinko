@@ -8,50 +8,72 @@ class TypingMeta(type):
                              parameters)
 
 
+class FuncMeta(TypingMeta):
+
+    def __new__(typ, name, bases, namespace, parameters=(None, None)):
+        cls = TypingMeta.__new__(typ, name, bases, namespace)
+        cls.__args__, cls.__result__ = parameters
+        return cls
+
+    def __repr__(cls):
+        return '{}[{!r}, {!r}]'.format(cls.__name__, cls.__args__,
+                                       cls.__result__)
+
 class Func(object):
-    class __metaclass__(TypingMeta):
+    __metaclass__ = FuncMeta
 
-        def __new__(typ, name, bases, namespace, parameters=(None, None)):
-            cls = TypingMeta.__new__(typ, name, bases, namespace)
-            cls.__args__, cls.__result__ = parameters
-            return cls
 
-        def __repr__(cls):
-            return '{}[{!r}, {!r}]'.format(cls.__name__, cls.__args__,
-                                           cls.__result__)
+class VarArgsMeta(TypingMeta):
 
+    def __new__(typ, name, bases, namespace, arg_type=None):
+        cls = TypingMeta.__new__(typ, name, bases, namespace)
+        cls.__arg_type__ = arg_type
+        return cls
+
+    def __repr__(cls):
+        return '{}[{!r}]'.format(cls.__name__, cls.__arg_type__)
 
 class VarArgs(object):
-    class __metaclass__(TypingMeta):
+    __metaclass__ = VarArgsMeta
 
-        def __new__(typ, name, bases, namespace, arg_type=None):
-            cls = TypingMeta.__new__(typ, name, bases, namespace)
-            cls.__arg_type__ = arg_type
-            return cls
 
-        def __repr__(cls):
-            return '{}[{!r}]'.format(cls.__name__, cls.__arg_type__)
+class NamedArgMeta(TypingMeta):
 
+    def __new__(typ, name, bases, namespace, parameters=(None, None)):
+        cls = TypingMeta.__new__(typ, name, bases, namespace)
+        cls.__arg_name__, cls.__arg_type__ = parameters
+        return cls
+
+    def __repr__(cls):
+        return '{}[{}={!r}]'.format(cls.__name__, cls.__arg_name__,
+                                    cls.__arg_type__)
 
 class NamedArg(object):
-    class __metaclass__(TypingMeta):
+    __metaclass__ = NamedArgMeta
 
-        def __new__(typ, name, bases, namespace, parameters=(None, None)):
-            cls = TypingMeta.__new__(typ, name, bases, namespace)
-            cls.__arg_name__, cls.__arg_type__ = parameters
-            return cls
 
-        def __repr__(cls):
-            return '{}[{}={!r}]'.format(cls.__name__, cls.__arg_name__,
-                                        cls.__arg_type__)
+class ExpressionType(object):
+    pass
 
 
 StringType = unicode
 IntType = long
 
 
+class DictTypeMeta(TypingMeta):
+
+    def __new__(typ, name, bases, namespace, parameters=(None, None)):
+        cls = TypingMeta.__new__(typ, name, bases, namespace)
+        cls.__key_type__, cls.__value_type__ = parameters
+        return cls
+
+    def __repr__(cls):
+        return '{}[{!r}={!r}]'.format(cls.__name__, cls.__key_type__,
+                                      cls.__value_type__)
+
+
 class DictType(object):
-    pass
+    __metaclass__ = DictTypeMeta
 
 
 class OutputType(object):
