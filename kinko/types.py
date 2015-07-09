@@ -52,8 +52,18 @@ class NamedArg(object):
     __metaclass__ = NamedArgMeta
 
 
-class ExpressionType(object):
-    pass
+class QuotedMeta(TypingMeta):
+
+    def __new__(typ, name, bases, namespace, arg_type=None):
+        cls = TypingMeta.__new__(typ, name, bases, namespace)
+        cls.__arg_type__ = arg_type
+        return cls
+
+    def __repr__(cls):
+        return '{}[{!r}]'.format(cls.__name__, cls.__arg_type__)
+
+class Quoted(object):
+    __metaclass__ = QuotedMeta
 
 
 StringType = unicode

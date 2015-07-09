@@ -9,9 +9,9 @@ def split_args(args):
 
 
 def check_arg(value, type_, scope):
-    if type_ != ExpressionType:
+    if not isinstance(type_, QuotedMeta):
         value, scope = check(value, scope)
-    check_type(value, type_)
+        check_type(value, type_)
     return value, scope
 
 
@@ -65,9 +65,13 @@ def check(node, scope):
 def check_expr(fname, ftype, args, scope):
     args, kwargs, scope = check_args(args, ftype, scope)
     if fname == 'each':  # [var collection *body]
-        var, col, body = args
+        var, col, quoted_body = args
         body_scope = Scope({var: col.__item_type__}, parent=scope)
-        body, body_scope = check(body, body_scope)
+        body = []
+        for item in quoted_body:
+            # TODO: OutputType shouldn't be hardcoded
+            item, body_scope = check_arg(item, OutputType, body_scope)
+            body.append(item)
         scope = scope.add(body_scope)
         args = var, col, body
 
@@ -101,7 +105,7 @@ global_scope = Scope({
         OutputType,
     ],
     'each': Func[
-        [SymbolType, CollectionType, VarArgs[OutputType]],
+        [SymbolType, CollectionType, VarArgs[Quoted[OutputType]]],
         OutputType,
     ],
 }, None)
