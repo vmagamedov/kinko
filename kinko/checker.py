@@ -12,7 +12,9 @@ def check_arg(value, type_, scope):
     if not isinstance(type_, QuotedMeta):
         value, scope = check(value, scope)
         check_type(value, type_)
-    return value, scope
+        return value, scope
+    else:
+        return type_(value), scope
 
 
 def check_args(args, ftype, scope):
@@ -69,8 +71,8 @@ def check_expr(fname, ftype, args, scope):
         body_scope = Scope({var: col.__item_type__}, parent=scope)
         body = []
         for item in quoted_body:
-            # TODO: OutputType shouldn't be hardcoded
-            item, body_scope = check_arg(item, OutputType, body_scope)
+            item, body_scope = check_arg(item.__quoted_value__,
+                                         item.__arg_type__, body_scope)
             body.append(item)
         scope = scope.add(body_scope)
         args = var, col, body

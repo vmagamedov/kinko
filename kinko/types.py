@@ -65,6 +65,9 @@ class QuotedMeta(TypingMeta):
 class Quoted(object):
     __metaclass__ = QuotedMeta
 
+    def __init__(self, value):
+        self.__quoted_value__ = value
+
 
 StringType = unicode
 IntType = long
