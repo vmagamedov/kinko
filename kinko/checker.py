@@ -8,6 +8,16 @@ def split_args(args):
     return [], {}
 
 
+def unsplit_args(args, kwargs):
+    # TODO: implement
+    return []
+
+
+def gen_func_type(placeholders):
+    # TODO: implement
+    return Func[[], None]
+
+
 def check_arg(value, type_, scope):
     if not isinstance(type_, QuotedMeta):
         value, scope = check(value, scope)
@@ -17,14 +27,14 @@ def check_arg(value, type_, scope):
         return type_(value), scope
 
 
-def check_args(args, ftype, scope):
-    args_, kwargs_ = split_args(args)
+def check_args(args, kwargs, ftype, scope):
+    args, kwargs = list(args), dict(kwargs)
     checked_args, checked_kwargs = [], {}
 
     for arg in ftype.__args__:
         if isinstance(arg, NamedArgMeta):
             try:
-                value = kwargs_.pop(arg.__arg_name__)
+                value = kwargs.pop(arg.__arg_name__)
             except KeyError:
                 raise TypeError('Missing named argument: {!r}'.format(arg))
             else:
@@ -32,21 +42,21 @@ def check_args(args, ftype, scope):
                 checked_kwargs[arg.__arg_name__] = value
         elif isinstance(arg, VarArgsMeta):
             varargs = []
-            for item in args_:
+            for item in args:
                 item, scope = check_arg(item, arg.__arg_type__, scope)
                 varargs.append(item)
             checked_args.append(varargs)
-            args_ = []
+            args = []
         else:
             try:
-                value = args_.pop(0)
+                value = args.pop(0)
             except IndexError:
                 raise TypeError('Missing positional argument: {!r}'.format(arg))
             else:
                 value, scope = check_arg(value, arg, scope)
                 checked_args.append(value)
 
-    if args_ or kwargs_:
+    if args or kwargs:
         raise TypeError('More arguments than expected')
 
     return checked_args, checked_kwargs, scope
@@ -65,9 +75,11 @@ def check(node, scope):
 
 
 def check_expr(fname, ftype, args, scope):
-    args, kwargs, scope = check_args(args, ftype, scope)
-    if fname == 'each':  # [var collection *body]
-        var, col, quoted_body = args
+    pos_args, kw_args = split_args(args)
+    pos_args, kw_args, scope = check_args(pos_args, kw_args, ftype, scope)
+
+    if fname == 'each':
+        var, col, quoted_body = pos_args
         body_scope = Scope({var: col.__item_type__}, parent=scope)
         body = []
         for item in quoted_body:
@@ -75,23 +87,24 @@ def check_expr(fname, ftype, args, scope):
                                          item.__arg_type__, body_scope)
             body.append(item)
         scope = scope.add(body_scope)
-        args = var, col, body
+        pos_args = var, col, body
 
-    elif fname == 'div':  # [attrs *body]
-        pass
-
-    elif fname == 'def':  # [name *body]
-        name, body = args
-        body, body_scope = check(body, scope)
+    elif fname == 'def':
+        name, quoted_body = pos_args
+        body_scope = Scope({}, parent=scope)
+        body = []
+        for item in quoted_body:
+            item, body_scope = check_arg(item.__quoted_value__,
+                                         item.__arg_type__, body_scope)
+            body.append(item)
         scope = scope.add(body_scope)
-        # FIXME: gen proper ftype from placeholders
-        ftype = body_scope.placeholders
-        scope = scope.define(name, ftype)
-        args = name, body
+        scope = scope.define(name, gen_func_type(body_scope.placeholders))
+        pos_args = name, body
 
     else:
         raise NotImplementedError
 
+    args = unsplit_args(pos_args, kw_args)
     return Tuple.typed(ftype.__result__, *args), scope
 
 
@@ -110,4 +123,5 @@ global_scope = Scope({
         [SymbolType, CollectionType, VarArgs[Quoted[OutputType]]],
         OutputType,
     ],
+    'def': Func[[SymbolType, VarArgs[Quoted[OutputType]]], Func],
 }, None)
