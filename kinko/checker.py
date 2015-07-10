@@ -86,7 +86,7 @@ def check(node, scope):
         if not node.values:
             raise TypeError('Empty tuple')
         name_sym, rest = node.values[0], node.values[1:]
-        func = scope.lookup(name_sym)
+        func = scope.lookup(name_sym.name)
         if not isinstance(func, FuncMeta):
             raise TypeError('Not a Func type')
         return check_expr(name_sym.name, func, rest, scope)
@@ -99,25 +99,27 @@ def check_expr(fname, ftype, args, scope):
 
     if fname == 'each':
         var, col, quoted_body = pos_args
-        body_scope = Scope({var.name: col.__item_type__}, parent=scope)
+        body_scope = Scope(scope)
+        body_scope = body_scope.define_symbol(var.name, col.__item_type__)
         body = []
         for item in quoted_body:
             item, body_scope = check_arg(item.__quoted_value__,
                                          item.__arg_type__, body_scope)
             body.append(item)
-        scope = scope.add(body_scope)
+        scope = scope.add_child(body_scope)
         pos_args = var, col, body
 
     elif fname == 'def':
         name, quoted_body = pos_args
-        body_scope = Scope({}, parent=scope)
+        body_scope = Scope(scope)
         body = []
         for item in quoted_body:
             item, body_scope = check_arg(item.__quoted_value__,
                                          item.__arg_type__, body_scope)
             body.append(item)
-        scope = scope.add(body_scope)
-        scope = scope.define(name, gen_func_type(body_scope.placeholders))
+        func_type = gen_func_type(body_scope.placeholders)
+        scope = scope.add_child(body_scope)
+        scope = scope.define_symbol(name, func_type)
         pos_args = name, body
 
     else:
@@ -133,14 +135,16 @@ def check_type(var, expected_type):
                         .format(var.__type__, expected_type))
 
 
-global_scope = Scope({
-    'div': Func[
-        [DictType[StringType, StringType], VarArgs[OutputType]],
-        OutputType,
-    ],
-    'each': Func[
-        [SymbolType, CollectionType, VarArgs[Quoted[OutputType]]],
-        OutputType,
-    ],
-    'def': Func[[SymbolType, VarArgs[Quoted[OutputType]]], Func],
-}, None)
+global_scope = Scope(None)
+global_scope.define_symbol('div', Func[
+    [DictType[StringType, StringType], VarArgs[OutputType]],
+    OutputType,
+])
+global_scope.define_symbol('each', Func[
+    [SymbolType, CollectionType, VarArgs[Quoted[OutputType]]],
+    OutputType,
+])
+global_scope.define_symbol('def', Func[
+    [SymbolType, VarArgs[Quoted[OutputType]]],
+    Func,
+])

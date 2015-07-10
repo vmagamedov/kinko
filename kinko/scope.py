@@ -1,40 +1,48 @@
-from collections import namedtuple
+import copy
+import functools
 
 
-Func = namedtuple('Func', 'name signature')
+def _immutable(func):
+    @functools.wraps(func)
+    def wrapper(self, *args, **kwargs):
+        self_copy = copy.copy(self)
+        func(self_copy, *args, **kwargs)
+        return self_copy
+    return wrapper
 
 
 class Scope(object):
 
-    def __init__(self, vars_, parent):
-        self.vars = vars_
+    def __init__(self, parent):
         self.parent = parent
         self.children = []
-        self.functions = {}
+        self.vars = {}
+        self.placeholders = {}
 
-    def lookup(self, sym):
+    def lookup(self, name):
         try:
-            return self.vars[sym.name]
+            return self.vars[name]
         except KeyError:
             if self.parent is not None:
-                return self.parent.lookup(sym)
+                return self.parent.lookup(name)
             else:
-                raise
+                raise LookupError('Undefined name "{}"'.format(name))
 
-    def _copy(self):
-        copy = type(self).__new__(type(self))
-        copy.vars = self.vars.copy()
-        copy.parent = self.parent
-        copy.children = self.children[:]
-        copy.functions = self.functions.copy()
-        return copy
+    def __copy__(self):
+        self_copy = self.__class__.__new__(self.__class__)
+        self_copy.__dict__ = {k: copy.copy(v)
+                              for k, v in self.__dict__.items()}
+        return self_copy
 
-    def add(self, child):
-        copy = self._copy()
-        copy.children.append(child)
-        return copy
+    @_immutable
+    def add_child(self, child):
+        self.children.append(child)
+        self.placeholders.update(child.placeholders)
 
-    def define(self, name, ftype):
-        copy = self._copy()
-        copy.functions[name] = ftype
-        return copy
+    @_immutable
+    def define_symbol(self, name, type_):
+        self.vars[name] = type_
+
+    @_immutable
+    def define_placeholder(self, name, type_):
+        self.placeholders[name] = type_
