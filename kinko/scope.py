@@ -7,7 +7,7 @@ Func = namedtuple('Func', 'name signature')
 class Scope(object):
 
     def __init__(self, vars_, parent):
-        self.vars = {sym.name: val for sym, val in vars_.items()}
+        self.vars = vars_
         self.parent = parent
         self.children = []
         self.functions = {}

@@ -12,15 +12,24 @@ class Symbol(Node):
     def __init__(self, name):
         self.name = name
 
+    def __repr__(self):
+        return '<{}({})>'.format(self.__class__.__name__, self.name)
+
 
 class Keyword(Node):
     def __init__(self, name):
         self.name = name
 
+    def __repr__(self):
+        return '<{}({})>'.format(self.__class__.__name__, self.name)
+
 
 class Placeholder(Node):
     def __init__(self, name):
         self.name = name
+
+    def __repr__(self):
+        return '<{}({})>'.format(self.__class__.__name__, self.name)
 
 
 class Tuple(Node):
@@ -29,4 +38,8 @@ class Tuple(Node):
 
 
 class List(Node):
+    pass
+
+
+class Dict(Node):
     pass

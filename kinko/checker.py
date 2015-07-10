@@ -1,16 +1,35 @@
+from itertools import chain
+
 from .scope import Scope
-from .nodes import Tuple
+from .nodes import Tuple, Keyword
 from .types import *
 
 
 def split_args(args):
-    # TODO: implement
-    return [], {}
+    pos_args, kw_args = [], {}
+    i = iter(args)
+    try:
+        while True:
+            arg = i.next()
+            if isinstance(arg, Keyword):
+                try:
+                    val = i.next()
+                except StopIteration:
+                    raise TypeError('Missing named argument value')
+                else:
+                    kw_args[arg.name] = val
+            else:
+                pos_args.append(arg)
+    except StopIteration:
+        return pos_args, kw_args
 
 
-def unsplit_args(args, kwargs):
-    # TODO: implement
-    return []
+def unsplit_args(pos_args, kw_args):
+    args = list(pos_args)
+    args.extend(chain.from_iterable(
+        (Keyword(k), v) for k, v in kw_args.items()
+    ))
+    return args
 
 
 def gen_func_type(placeholders):
@@ -80,7 +99,7 @@ def check_expr(fname, ftype, args, scope):
 
     if fname == 'each':
         var, col, quoted_body = pos_args
-        body_scope = Scope({var: col.__item_type__}, parent=scope)
+        body_scope = Scope({var.name: col.__item_type__}, parent=scope)
         body = []
         for item in quoted_body:
             item, body_scope = check_arg(item.__quoted_value__,
