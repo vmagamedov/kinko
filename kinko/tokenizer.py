@@ -265,6 +265,7 @@ def tokenize(string, filename='<string>'):
             raise TokenizerError(char_iter.location_from(pos),
                 "Wrong character {!r}".format(ch))
     else:
+        eof_pos = char_iter.location_from(char_iter.next_position)
         if char_iter.next_position.column != 1:
             yield (Token.NEWLINE, '\n', eof_pos)
     eof_pos = char_iter.location_from(char_iter.next_position)

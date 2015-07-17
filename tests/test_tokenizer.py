@@ -9,14 +9,12 @@ class TestTokenizer(TestCase):
         left = [(kind.value, value) for (kind, value, loc) in tokenize(string)]
         self.assertEqual(left, tokens)
 
-    """
     def testSimple(self):
         self.assert_tokens('div "text"', [
             ("ident", "div"),
             ("string", '"text"'),
             ("newline", '\n'),
         ])
-"""
 
     indent_comment_tokens = [
         ("ident", 'def'),
@@ -72,6 +70,31 @@ class TestTokenizer(TestCase):
                 span "value" ; whaverver
             pre
         """, self.indent_comment_tokens)
+
+
+    def testKeyword(self):
+        self.assert_tokens('div :class "red"', [
+            ("ident", "div"),
+            ("keyword", 'class'),
+            ("string", '"red"'),
+            ("newline", '\n'),
+        ])
+
+    def testBrackets(self):
+        self.assert_tokens('''(div
+            :class "red"
+        )''', [
+            ("open_paren", "("),
+            ("ident", "div"),
+            ("keyword", 'class'),
+            ("string", '"red"'),
+            ("close_paren", ")"),
+            ("newline", '\n'),
+        ])
+
+
+
+
 
 
 
