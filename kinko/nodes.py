@@ -38,8 +38,10 @@ class Tuple(Node):
 
 
 class List(Node):
-    pass
+    def __init__(self, *values):
+        self.values = values
 
 
 class Dict(Node):
-    pass
+    def __init__(self, *values):
+        self.values = values
