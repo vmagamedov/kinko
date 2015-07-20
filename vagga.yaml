@@ -17,9 +17,11 @@ containers:
       - !Py2Install
         - enum34
         - funcparserlib
+        - astor
 
   py3:
     setup:
       - !Ubuntu trusty
       - !Py3Install
         - funcparserlib
+        - astor

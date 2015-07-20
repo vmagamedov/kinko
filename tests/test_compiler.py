@@ -21,8 +21,8 @@ class TestParser(TestCase):
         return str(compile_template(body))
 
     def testSimple(self):
-        self.assertEqual(self.parse('div "text"'), 'div("text")')
+        self.assertEqual(self.parse('div "text"'), "div('text')")
 
     def testNested(self):
         self.assertEqual(self.parse('div "text"\n  p (b "hello")'),
-                                    'div("text", p(b("hello")))')
+                                    "div('text', p(b('hello')))")
