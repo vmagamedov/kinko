@@ -29,6 +29,7 @@ class Token(Enum):
     CLOSE_BRACKET = 'close_bracket'
     INDENT = 'indent'
     DEDENT = 'dedent'
+    EOF = 'eof'
 
 
 BRACKET_NAMES = {
@@ -80,17 +81,15 @@ class Location(object):
         self.end = end
 
     def __str__(self):
-        if self.start.filename == self.end.filename:
-            if self.start.offset == self.end.offset-1:
-                return "{0.filename}:{0.start.line}:{0.start.column}"\
-                    .format(self)
-            else:
-                return "{0.filename}:{0.start.line}:{0.start.column}\
-                    -{0.end.line}:{0.end.column}".format(self)
-        else:
-            return "{0.filename}:{0.start.line}:{0.start.column}-\n"\
-                "  {0.end.filename}:{0.end.line}:{0.end.column}"\
+        if self.start.offset == self.end.offset-1:
+            return "{0.filename}:{0.start.line}:{0.start.column}"\
                 .format(self)
+        else:
+            return "{0.filename}:{0.start.line}:{0.start.column}"\
+                "-{0.end.line}:{0.end.column}".format(self)
+
+    def __repr__(self):
+        return '<Loc {}>'.format(self)
 
 
 class Chars(object):
@@ -271,5 +270,6 @@ def tokenize(string, filename='<string>'):
     eof_pos = char_iter.location_from(char_iter.next_position)
     for i in range(1, len(indents)):
         yield (Token.DEDENT, '', eof_pos)
+    yield (Token.EOF, '', eof_pos)
 
 

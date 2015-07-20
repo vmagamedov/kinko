@@ -14,6 +14,7 @@ class TestTokenizer(TestCase):
             ("ident", "div"),
             ("string", '"text"'),
             ("newline", '\n'),
+            ("eof", ''),
         ])
 
     indent_comment_tokens = [
@@ -45,6 +46,7 @@ class TestTokenizer(TestCase):
         ("ident", 'pre'),
         ("newline", '\n'),
         ("dedent", ''),
+        ("eof", ''),
     ]
 
     def testindent(self):
@@ -78,6 +80,7 @@ class TestTokenizer(TestCase):
             ("keyword", 'class'),
             ("string", '"red"'),
             ("newline", '\n'),
+            ("eof", ''),
         ])
 
     def testBrackets(self):
@@ -90,6 +93,7 @@ class TestTokenizer(TestCase):
             ("string", '"red"'),
             ("close_paren", ")"),
             ("newline", '\n'),
+            ("eof", ''),
         ])
 
 
