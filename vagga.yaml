@@ -14,11 +14,7 @@ containers:
   py2:
     setup:
       - !Ubuntu trusty
-      - !Py2Install
-        - enum34
-        - singledispatch
-        - funcparserlib
-        - astor
+      - !Py2Requirements "requirements.txt"
 
   py3:
     setup:
