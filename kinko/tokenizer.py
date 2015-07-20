@@ -119,7 +119,7 @@ class Chars(object):
 
     def peek(self):
         try:
-            return self.string[self.index+1]
+            return self.string[self.index]
         except IndexError:
             return None
 
@@ -135,7 +135,6 @@ def read_slice(char_iter, valid_chars, name, start=None):
     start = start or char_iter.next_position
     while char_iter.peek() in valid_chars:
         next(char_iter)
-    next(char_iter)
     end = char_iter.next_position
     return (name, char_iter.string[start:end],
         Location(char_iter.filename, start, end))

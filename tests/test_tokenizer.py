@@ -17,6 +17,14 @@ class TestTokenizer(TestCase):
             ("eof", ''),
         ])
 
+    def testOneLetter(self):
+        self.assert_tokens('b "text"', [
+            ("ident", "b"),
+            ("string", '"text"'),
+            ("newline", '\n'),
+            ("eof", ''),
+        ])
+
     indent_comment_tokens = [
         ("ident", 'def'),
         ("ident", 'hello'),
