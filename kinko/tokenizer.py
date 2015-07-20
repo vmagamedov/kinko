@@ -117,11 +117,11 @@ class Chars(object):
         return rpos, char
     next = __next__  # crappy py2
 
-    def peek(self):
+    def peek_in(self, valid_chars):
         try:
-            return self.string[self.index]
+            return self.string[self.index] in valid_chars
         except IndexError:
-            return None
+            return False
 
     @property
     def next_position(self):
@@ -133,7 +133,7 @@ class Chars(object):
 
 def read_slice(char_iter, valid_chars, name, start=None):
     start = start or char_iter.next_position
-    while char_iter.peek() in valid_chars:
+    while char_iter.peek_in(valid_chars):
         next(char_iter)
     end = char_iter.next_position
     return (name, char_iter.string[start:end],

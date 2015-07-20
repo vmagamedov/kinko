@@ -25,6 +25,13 @@ class TestTokenizer(TestCase):
             ("eof", ''),
         ])
 
+    def testTokenEof(self):
+        self.assert_tokens('token', [
+            ("ident", "token"),
+            ("newline", '\n'),
+            ("eof", ''),
+        ])
+
     indent_comment_tokens = [
         ("ident", 'def'),
         ("ident", 'hello'),
