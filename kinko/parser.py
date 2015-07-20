@@ -52,7 +52,8 @@ def parser():
     tuple_.define(
         (symbol + many(expr | inline_keyword) + delim(T.NEWLINE) +
         maybe(delim(T.INDENT) +
-            many(tuple_|placeholder|block_keyword) +
+            many(tuple_|placeholder|block_keyword |
+                ((string|number) + delim(T.NEWLINE))) +
             delim(T.DEDENT)))
         >> (lambda triple: N.Tuple(triple[0], triple[1]+(triple[2] or []))))
     expr.define(dotname | paren_tuple | string | number | dict_ | list_ |

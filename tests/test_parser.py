@@ -23,6 +23,11 @@ class TestParser(TestCase):
             N.Tuple(N.Symbol('div'), [N.String("text")])
         ])
 
+    def testIndent(self):
+        self.assertEqual(self.parse('div\n "text"'), [
+            N.Tuple(N.Symbol('div'), [N.String("text")])
+        ])
+
     def testNested(self):
         self.assertEqual(self.parse("""div "text"
             div 12

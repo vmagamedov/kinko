@@ -42,3 +42,23 @@ class GenericCall(Node):
         self.kwargs = kwargs
 
 
+class String(Node):
+    __slots__ = ('value',)
+
+    def __init__(self, value):
+        self.value = value
+
+
+class Attr(Node):
+    __slots__ = ('expr', 'attr')
+
+    def __init__(self, expr, attr):
+        self.expr = expr
+        self.attr = attr
+
+
+class Name(Node):
+    __slots__ = ('name',)
+
+    def __init__(self, name):
+        self.name = name

@@ -1,5 +1,37 @@
+try:
+    from functools import singledispatch
+except ImportError:
+    from singledispatch import singledispatch
+
 from . import nodes as N
 from . import ast as A
+
+
+@singledispatch
+def translate(node):
+    raise NotImplementedError(node)
+
+@translate.register(N.String)
+def translate_string(node):
+    return A.String(node.value)
+
+
+@translate.register(N.Tuple)
+def translate_call(item):
+    return A.GenericCall(
+        name=item.symbol.name,
+        args=[translate(x)
+              for x in item.args if not isinstance(x, N.KeywordPair)],
+        kwargs={x.keyword.name: translate(y.value)
+                for x in item.args if isinstance(x, N.KeywordPair)})
+
+
+@translate.register(N.Dotname)
+def translate_dotname(item):
+    val = A.Name(item.item.name)
+    for attr in item.attrs:
+        val = A.Attr(val, attr.name)
+    return val
 
 
 class TranslationError(Exception):
@@ -9,14 +41,6 @@ class TranslationError(Exception):
 
     def __str__(self):
         return "{}: Translation error {}".format(self.location, self.message)
-
-
-def translate_call(item):
-    return A.GenericCall(
-        name=item.symbol.name,
-        args=[x for x in item.args if not isinstance(x, N.KeywordPair)],
-        kwargs={x.keyword.name: y.value for x in item.args
-                                        if isinstance(x, N.KeywordPair)})
 
 
 def _find_placeholders(node):
@@ -52,7 +76,7 @@ def translate_template(lst):
                 "Dot is not allowed in function name")
         placeholders = find_placeholders(item.args)
         func = A.Function(nameitem.item.name,
-            list(map(translate_call, body)),
+            list(map(translate, body)),
             arguments=placeholders)
         functions.append(func)
     return A.File(functions=functions)

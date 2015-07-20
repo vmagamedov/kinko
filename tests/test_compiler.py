@@ -9,7 +9,7 @@ from kinko.translate import translate_template
 from kinko.compiler import compile_to_string
 
 
-class TestParser(TestCase):
+class TestCompiler(TestCase):
 
     def parse(self, text):
         tokens = list(tokenize(text))
@@ -23,12 +23,33 @@ class TestParser(TestCase):
         return str(compile_to_string(ast))
 
     def testSimple(self):
-        self.assertEqual(self.parse('def main\n div "text"'), "div('text')")
+        self.assertEqual(self.parse('def main\n div "text"'),
+            "def main(buf):\n    div(buf, (lambda buf: buf.write('text')))")
+
+    def testText(self):
+        self.assertEqual(self.parse('def main\n "text"'),
+            "def main(buf):\n    buf.write('text')")
+
+    def testText2(self):
+        self.assertEqual(self.parse('def main\n "a"\n "b"'),
+            "def main(buf):\n    buf.write('a')\n    buf.write('b')")
+
+    def testTwo(self):
+        self.assertEqual(self.parse('def main\n p "1"\n p "2"'),
+            "def main(buf):\n"
+            "    p(buf, (lambda buf: buf.write('1')))\n"
+            "    p(buf, (lambda buf: buf.write('2')))")
 
     def testNested(self):
         self.assertEqual(self.parse('def main\n div "text"\n  p (b "hello")'),
-                                    "div('text', p(b('hello')))")
+            "def main(buf):\n"
+            "    div(buf, (lambda buf: buf.write('text')),"
+                        " (lambda buf: p(buf,"
+                        " (lambda buf: b(buf,"
+                        " (lambda buf:"
+                        " buf.write('hello')))))))")
 
     def testAttr(self):
         self.assertEqual(self.parse('def main\n render product.name'),
-                                    'render(product.name)')
+            'def main(buf):\n'
+            '    render(buf, (lambda buf: buf.write(product.name)))')
