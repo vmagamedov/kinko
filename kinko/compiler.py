@@ -4,9 +4,11 @@ import astor
 
 
 def compile_dotname(dotname):
-    val = P.Name(dotname.name, True)
-    for attr in dotname.attr:
-        val = P.Attr(val, attr)
+    assert isinstance(dotname.item, N.Symbol), dotname
+    val = P.Name(dotname.item.name, True)
+    for attr in dotname.attrs:
+        assert isinstance(attr, N.Symbol), dotname
+        val = P.Attribute(val, attr.name, True)
     return val
 
 def compile_expr(expr):

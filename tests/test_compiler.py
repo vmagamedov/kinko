@@ -26,3 +26,7 @@ class TestParser(TestCase):
     def testNested(self):
         self.assertEqual(self.parse('div "text"\n  p (b "hello")'),
                                     "div('text', p(b('hello')))")
+
+    def testAttr(self):
+        self.assertEqual(self.parse('render product.name'),
+                                    'render(product.name)')
