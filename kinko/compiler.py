@@ -1,38 +1,44 @@
-from . import nodes as N
+from __future__ import absolute_import
+
+try:
+    from functools import singledispatch
+except ImportError:
+    from singledispatch import singledispatch
+
 import ast as P
+
 import astor
 
-
-def compile_dotname(dotname):
-    assert isinstance(dotname.item, N.Symbol), dotname
-    val = P.Name(dotname.item.name, True)
-    for attr in dotname.attrs:
-        assert isinstance(attr, N.Symbol), dotname
-        val = P.Attribute(val, attr.name, True)
-    return val
-
-def compile_expr(expr):
-    if isinstance(expr, N.Tuple):
-        return compile_tuple(expr)
-    elif isinstance(expr, N.Dotname):
-        return compile_dotname(expr)
-    elif isinstance(expr, N.Number):
-        return P.Number(expr.value)
-    elif isinstance(expr, N.String):
-        return P.Str(expr.value)
-    else:
-        raise NotImplementedError(expr)
+from . import ast as A
 
 
-def compile_tuple(tup):
-    return P.Call(P.Name(tup.symbol.name, True),
-         list(map(compile_expr, tup.args)), [],
-         None, None)
+@singledispatch
+def build(node):
+    raise NotImplementedError(node)
 
 
-def compile_body(lst):
-    return list(map(compile_tuple, lst))
+@build.register(A.Function)
+def build_function(func):
+    assert not func.arguments # TODO(tailhook)
+    return P.FunctionDef(func.name,
+        P.arguments([P.Name("buf", False)], None, None, []),
+        list(map(build, func.body)),
+        [])
 
-def compile_template(lst):
-    body = compile_body(lst)
-    return astor.to_source(P.Module(body=body))
+
+@build.register(A.GenericCall)
+def build_generic_call(func):
+    return P.Call(P.Name(func.name, True),
+                  [P.Name("buf", True)], [], None, None)
+
+
+@build.register(A.File)
+def build_file(file):
+    # TODO(tailhook) add imports
+    body = list(map(build, file.functions))
+    return P.Module(body=body)
+
+
+def compile_to_string(ast):
+    body = build(ast)
+    return astor.to_source(body)

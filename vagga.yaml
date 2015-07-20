@@ -16,6 +16,7 @@ containers:
       - !Ubuntu trusty
       - !Py2Install
         - enum34
+        - singledispatch
         - funcparserlib
         - astor
 
