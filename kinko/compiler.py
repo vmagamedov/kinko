@@ -13,12 +13,21 @@ import astor
 from . import ast as A
 
 
-if sys.version >= (3, 0):
+if sys.version_info >= (3, 0):
+
     def arguments(args):
         return P.arguments([P.Name("buf", False)], None, [], [], None, [])
+
+    def mkfunc(name, args, body):
+        return P.FunctionDef(name, args, body, [], None)
+
 else:
+
     def arguments(args):
         return P.arguments([P.Name("buf", False)], None, None, [])
+
+    def mkfunc(name, args, body):
+        return P.FunctionDef(name, args, body, [])
 
 
 @singledispatch
@@ -68,10 +77,9 @@ def expr_attr(node):
 
 def process_function(func):
     assert not func.arguments # TODO(tailhook)
-    return P.FunctionDef(func.name,
+    return mkfunc(func.name,
         arguments(["buf"]),
-        list(map(P.Expr, map(writer, func.body))),
-        [])
+        list(map(P.Expr, map(writer, func.body))))
 
 
 @expr.register(A.GenericCall)
