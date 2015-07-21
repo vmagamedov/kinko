@@ -41,10 +41,10 @@ def parser():
 
     delim = lambda t: skip(token(Pattern(t)))
 
-    symbol = token(Pattern(T.IDENT)) >> node_gen(N.Symbol)
+    symbol = token(Pattern(T.SYMBOL)) >> node_gen(N.Symbol)
 
     # Note: tokenizer guarantee that value is always quoted string
-    string = token(Pattern(T.STRING)) >> node_gen(N.String, literal_eval)
+    string = token(Pattern(T.STRING)) >> node_gen(N.String)
 
     placeholder = token(Pattern(T.PLACEHOLDER)) >> node_gen(N.Placeholder)
     keyword = token(Pattern(T.KEYWORD)) >> node_gen(N.Keyword)

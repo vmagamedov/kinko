@@ -1,124 +1,130 @@
 from unittest import TestCase
-from kinko.tokenizer import tokenize
+
+from kinko.tokenizer import Token, tokenize
 
 
 class TestTokenizer(TestCase):
     maxDiff = 1000
 
-    def assert_tokens(self, string, tokens):
-        left = [(kind.value, value) for (kind, value, loc) in tokenize(string)]
+    def assertTokens(self, string, tokens):
+        left = [(kind, value) for (kind, value, loc) in tokenize(string)]
         self.assertEqual(left, tokens)
 
     def testSimple(self):
-        self.assert_tokens('div "text"', [
-            ("ident", "div"),
-            ("string", '"text"'),
-            ("newline", '\n'),
-            ("eof", ''),
+        self.assertTokens('div "text"', [
+            (Token.SYMBOL, 'div'),
+            (Token.STRING, 'text'),
+            (Token.NEWLINE, '\n'),
+            (Token.EOF, ''),
         ])
 
     def testOneLetter(self):
-        self.assert_tokens('b "text"', [
-            ("ident", "b"),
-            ("string", '"text"'),
-            ("newline", '\n'),
-            ("eof", ''),
+        self.assertTokens('b "text"', [
+            (Token.SYMBOL, 'b'),
+            (Token.STRING, 'text'),
+            (Token.NEWLINE, '\n'),
+            (Token.EOF, ''),
         ])
 
     def testTokenEof(self):
-        self.assert_tokens('token', [
-            ("ident", "token"),
-            ("newline", '\n'),
-            ("eof", ''),
+        self.assertTokens('token', [
+            (Token.SYMBOL, 'token'),
+            (Token.NEWLINE, '\n'),
+            (Token.EOF, ''),
         ])
 
-    indent_comment_tokens = [
-        ("ident", 'def'),
-        ("ident", 'hello'),
-        ("newline", '\n'),
-        ("indent", ''),
-        ("ident", 'div'),
-        ("keyword", 'class'),
-        ("string", '"world"'),
-        ("newline", '\n'),
-        ("indent", ''),
-        ("string", '"text"'),
-        ("newline", '\n'),
-        ("ident", 'div'),
-        ("newline", '\n'),
-        ("indent", ''),
-        ("ident", 'div'),
-        ("newline", '\n'),
-        ("indent", ''),
-        ("string", '"content"'),
-        ("newline", '\n'),
-        ("dedent", ''),
-        ("dedent", ''),
-        ("ident", 'span'),
-        ("string", '"value"'),
-        ("newline", '\n'),
-        ("dedent", ''),
-        ("ident", 'pre'),
-        ("newline", '\n'),
-        ("dedent", ''),
-        ("eof", ''),
-    ]
+    def testIndent(self):
+        self.assertTokens(
+            'def hello\n'
+            '  div :class "world"\n'
+            '    "text"\n'
+            '    div\n'
+            '      div\n'
+            '        "content"\n'
+            '    span "value"\n'
+            '  pre\n',
+            [
+                (Token.SYMBOL, 'def'),
+                (Token.SYMBOL, 'hello'),
+                (Token.NEWLINE, '\n'),
+                (Token.INDENT, ''),
+                (Token.SYMBOL, 'div'),
+                (Token.KEYWORD, 'class'),
+                (Token.STRING, 'world'),
+                (Token.NEWLINE, '\n'),
+                (Token.INDENT, ''),
+                (Token.STRING, 'text'),
+                (Token.NEWLINE, '\n'),
+                (Token.SYMBOL, 'div'),
+                (Token.NEWLINE, '\n'),
+                (Token.INDENT, ''),
+                (Token.SYMBOL, 'div'),
+                (Token.NEWLINE, '\n'),
+                (Token.INDENT, ''),
+                (Token.STRING, 'content'),
+                (Token.NEWLINE, '\n'),
+                (Token.DEDENT, ''),
+                (Token.DEDENT, ''),
+                (Token.SYMBOL, 'span'),
+                (Token.STRING, 'value'),
+                (Token.NEWLINE, '\n'),
+                (Token.DEDENT, ''),
+                (Token.SYMBOL, 'pre'),
+                (Token.NEWLINE, '\n'),
+                (Token.DEDENT, ''),
+                (Token.EOF, ''),
+            ],
+        )
 
-    def testindent(self):
-        self.assert_tokens("""def hello
-            div :class "world"
-                "text"
-                div
-                    div
-                        "content"
-                span "value"
-            pre
-        """, self.indent_comment_tokens)
-
-    def testcomments(self):
-        self.assert_tokens("""def hello
-            div :class "world"
-                    ; whatever
-                "text"
-                div
-                    div
-                        "content"
-            ; whatever
-                span "value" ; whaverver
-            pre
-        """, self.indent_comment_tokens)
-
+    def testComments(self):
+        self.assertTokens(
+            '; comment\n'
+            'def hello\n'
+            '  div :class "world"\n'
+            '    ; whatever\n'
+            '    span "value" ; whatever\n',
+            [
+                (Token.SYMBOL, 'def'),
+                (Token.SYMBOL, 'hello'),
+                (Token.NEWLINE, '\n'),
+                (Token.INDENT, ''),
+                (Token.SYMBOL, 'div'),
+                (Token.KEYWORD, 'class'),
+                (Token.STRING, 'world'),
+                (Token.NEWLINE, '\n'),
+                (Token.INDENT, ''),
+                (Token.SYMBOL, 'span'),
+                (Token.STRING, 'value'),
+                (Token.NEWLINE, '\n'),
+                (Token.DEDENT, ''),
+                (Token.DEDENT, ''),
+                (Token.EOF, ''),
+            ],
+        )
 
     def testKeyword(self):
-        self.assert_tokens('div :class "red"', [
-            ("ident", "div"),
-            ("keyword", 'class'),
-            ("string", '"red"'),
-            ("newline", '\n'),
-            ("eof", ''),
-        ])
+        self.assertTokens(
+            'div :class "red"',
+            [
+                (Token.SYMBOL, 'div'),
+                (Token.KEYWORD, 'class'),
+                (Token.STRING, 'red'),
+                (Token.NEWLINE, '\n'),
+                (Token.EOF, ''),
+            ],
+        )
 
     def testBrackets(self):
-        self.assert_tokens('''(div
-            :class "red"
-        )''', [
-            ("open_paren", "("),
-            ("ident", "div"),
-            ("keyword", 'class'),
-            ("string", '"red"'),
-            ("close_paren", ")"),
-            ("newline", '\n'),
-            ("eof", ''),
-        ])
-
-
-
-
-
-
-
-
-
-
-
-
+        self.assertTokens(
+            '(div\n'
+            '  :class "red")',
+            [
+                (Token.OPEN_PAREN, '('),
+                (Token.SYMBOL, 'div'),
+                (Token.KEYWORD, 'class'),
+                (Token.STRING, 'red'),
+                (Token.CLOSE_PAREN, ')'),
+                (Token.NEWLINE, '\n'),
+                (Token.EOF, ''),
+            ],
+        )

@@ -1,4 +1,8 @@
-from enum import Enum
+try:
+    from sys import intern
+except ImportError:
+    pass
+
 from string import ascii_letters, digits, whitespace
 from collections import namedtuple
 
@@ -9,27 +13,30 @@ MATCHING_BRACKET = {
 }
 KEYWORD_CHARS = ascii_letters + digits
 PLACEHOLDER_CHARS = ascii_letters + digits
-IDENT_CHARS = ascii_letters + digits
+SYMBOL_CHARS = ascii_letters + digits
 NUMBER_CHARS = ascii_letters + digits + '.'
 
 
-class Token(Enum):
-    KEYWORD = 'keyword'
-    PLACEHOLDER = 'placeholder'
-    NEWLINE = 'newline'
-    DOT = 'dot'
-    STRING = 'string'
-    IDENT = 'ident'
-    NUMBER = 'number'
-    OPEN_BRACE = 'open_brace'
-    OPEN_PAREN = 'open_paren'
-    OPEN_BRACKET = 'open_bracket'
-    CLOSE_BRACE = 'close_brace'
-    CLOSE_PAREN = 'close_paren'
-    CLOSE_BRACKET = 'close_bracket'
-    INDENT = 'indent'
-    DEDENT = 'dedent'
-    EOF = 'eof'
+_Token = namedtuple('_Token', 'type value location')
+
+
+class Token(_Token):
+    KEYWORD = intern('keyword')
+    PLACEHOLDER = intern('placeholder')
+    NEWLINE = intern('newline')
+    DOT = intern('dot')
+    STRING = intern('string')
+    SYMBOL = intern('symbol')
+    NUMBER = intern('number')
+    OPEN_BRACE = intern('open_brace')
+    OPEN_PAREN = intern('open_paren')
+    OPEN_BRACKET = intern('open_bracket')
+    CLOSE_BRACE = intern('close_brace')
+    CLOSE_PAREN = intern('close_paren')
+    CLOSE_BRACKET = intern('close_bracket')
+    INDENT = intern('indent')
+    DEDENT = intern('dedent')
+    EOF = intern('eof')
 
 
 BRACKET_NAMES = {
@@ -55,41 +62,15 @@ class _Interrupt(Exception):
     pass
 
 
-class Position(object):
-    __slots__ = ('offset', 'line', 'column')
+_Position = namedtuple('_Position', 'offset line column')
 
-    def __init__(self, offset, line, column):
-        self.offset = offset
-        self.line = line
-        self.column = column
+class Position(_Position):
 
     def __index__(self):
         return self.offset
 
-    def __repr__(self):
-        return '<Pos {}:{}[{}]>'.format(self.line, self.column, self.offset)
 
-
-class Location(object):
-    __slots__ = ('filename', 'start', 'end')
-
-    def __init__(self, filename, start, end):
-        self.filename = filename
-        assert isinstance(start, Position), start
-        assert isinstance(end, Position), start
-        self.start = start
-        self.end = end
-
-    def __str__(self):
-        if self.start.offset == self.end.offset-1:
-            return "{0.filename}:{0.start.line}:{0.start.column}"\
-                .format(self)
-        else:
-            return "{0.filename}:{0.start.line}:{0.start.column}"\
-                "-{0.end.line}:{0.end.column}".format(self)
-
-    def __repr__(self):
-        return '<Loc {}>'.format(self)
+Location = namedtuple('Location', 'filename start end')
 
 
 class Chars(object):
@@ -102,7 +83,6 @@ class Chars(object):
 
     def __iter__(self):
         return self
-
 
     def __next__(self):
         rpos = self.next_position
@@ -149,8 +129,8 @@ def read_string(char_iter, start, quote):
             except StopIteration:
                 break
         elif ch == quote:
-            return (Token.STRING,
-                char_iter.string[start:char_iter.next_position],
+            return Token(Token.STRING,
+                char_iter.string[start.offset + 1: char_iter.next_position.offset - 1],
                 char_iter.location_from(start))
         elif ch == '\n':
             raise TokenizerError(char_iter.location_from(start),
@@ -161,12 +141,6 @@ def read_string(char_iter, start, quote):
 
 
 def tokenize(string, filename='<string>'):
-    """Tokenizes a text
-
-    :param filename: a filename used for Location's
-
-    Yields three-tuples: (token_type, literal_value, location)
-    """
     char_iter = Chars(string, filename)
     brackets = []
     indents = [1]
@@ -216,11 +190,11 @@ def tokenize(string, filename='<string>'):
                             "of indentation")
                     else:
                         for _i in range(ident_pos+1, len(indents)):
-                            yield (Token.DEDENT, '', loc)
+                            yield Token(Token.DEDENT, '', loc)
                         del indents[ident_pos+1:]
                 elif new_indent > cur_indent:
                     indents.append(new_indent)
-                    yield (Token.INDENT, '', loc)
+                    yield Token(Token.INDENT, '', loc)
                 break
         except _Interrupt:
             break
@@ -230,19 +204,19 @@ def tokenize(string, filename='<string>'):
             for pos, ch in char_iter:
                 if ch == '\n':
                     break
-            yield (Token.NEWLINE, '\n', char_iter.location_from(pos))
+            yield Token(Token.NEWLINE, '\n', char_iter.location_from(pos))
         elif ch == '#':
             yield read_slice(char_iter, PLACEHOLDER_CHARS, Token.PLACEHOLDER)
         elif ch == '\n' and not brackets:
-            yield (Token.NEWLINE, '\n', char_iter.location_from(pos))
+            yield Token(Token.NEWLINE, '\n', char_iter.location_from(pos))
         elif ch in whitespace:
             continue
         elif ch == '.':
-            yield (Token.DOT, '.', char_iter.location_from(pos))
+            yield Token(Token.DOT, '.', char_iter.location_from(pos))
         elif ch == '"':
             yield read_string(char_iter, pos, '"')
         elif ch in ascii_letters:
-            yield read_slice(char_iter, IDENT_CHARS, Token.IDENT, pos)
+            yield read_slice(char_iter, SYMBOL_CHARS, Token.SYMBOL, pos)
         elif ch in digits:
             yield read_slice(char_iter, NUMBER_CHARS, Token.NUMBER, pos)
         elif ch in '([{':
@@ -258,17 +232,15 @@ def tokenize(string, filename='<string>'):
             else:
                 raise TokenizerError(char_iter.location_from(pos),
                     "No parenthesis matching {!r}".format(ch))
-            yield (BRACKET_NAMES[ch], ch, char_iter.location_from(pos))
+            yield Token(BRACKET_NAMES[ch], ch, char_iter.location_from(pos))
         else:
             raise TokenizerError(char_iter.location_from(pos),
                 "Wrong character {!r}".format(ch))
     else:
         eof_pos = char_iter.location_from(char_iter.next_position)
         if char_iter.next_position.column != 1:
-            yield (Token.NEWLINE, '\n', eof_pos)
+            yield Token(Token.NEWLINE, '\n', eof_pos)
     eof_pos = char_iter.location_from(char_iter.next_position)
     for i in range(1, len(indents)):
-        yield (Token.DEDENT, '', eof_pos)
-    yield (Token.EOF, '', eof_pos)
-
-
+        yield Token(Token.DEDENT, '', eof_pos)
+    yield Token(Token.EOF, '', eof_pos)
