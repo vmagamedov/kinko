@@ -1,4 +1,8 @@
 from unittest import TestCase
+try:
+    from unittest.mock import patch
+except ImportError:
+    from mock import patch
 
 from funcparserlib.parser import NoParseError
 
@@ -7,7 +11,29 @@ from kinko.parser import parser
 from kinko.tokenizer import tokenize
 
 
+def node_eq(self, other):
+    if type(self) is not type(other):
+        return
+    d1 = dict(self.__dict__)
+    d1.pop('location', None)
+    d2 = dict(other.__dict__)
+    d2.pop('location', None)
+    return d1 == d1
+
+
+def node_ne(self, other):
+    return not self.__eq__(other)
+
+
 class TestParser(TestCase):
+
+    def setUp(self):
+        self.node_patcher = patch.multiple(N.Node, __eq__=node_eq,
+                                           __ne__=node_ne)
+        self.node_patcher.start()
+
+    def tearDown(self):
+        self.node_patcher.stop()
 
     def parse(self, text):
         tokens = list(tokenize(text))

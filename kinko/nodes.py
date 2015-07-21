@@ -9,23 +9,6 @@ class Node(object):
         node.__type__ = _type_
         return node
 
-    def __eq__(self, other):
-        """Equals method for unit tests
-
-        Discards location. Probably may be replaced by some
-        visitor for unit tests if better equals ever needed
-        """
-        if type(self) is not type(other):
-            return
-        d1 = dict(self.__dict__)
-        d1.pop('location', None)
-        d2 = dict(other.__dict__)
-        d2.pop('location', None)
-        return d1 == d1
-
-    def __ne__(self, other):
-        return not self.__eq__(other)
-
 
 class Symbol(Node):
 
