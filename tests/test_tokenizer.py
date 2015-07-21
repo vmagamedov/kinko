@@ -10,105 +10,78 @@ class TestTokenizer(TestCase):
         left = [(kind, value) for (kind, value, loc) in tokenize(string)]
         self.assertEqual(left, tokens)
 
-    def testSimple(self):
-        self.assertTokens('div "text"', [
-            (Token.SYMBOL, 'div'),
-            (Token.STRING, 'text'),
-            (Token.NEWLINE, '\n'),
-            (Token.EOF, ''),
-        ])
-
-    def testOneLetter(self):
-        self.assertTokens('b "text"', [
-            (Token.SYMBOL, 'b'),
-            (Token.STRING, 'text'),
-            (Token.NEWLINE, '\n'),
-            (Token.EOF, ''),
-        ])
-
-    def testTokenEof(self):
-        self.assertTokens('token', [
-            (Token.SYMBOL, 'token'),
-            (Token.NEWLINE, '\n'),
-            (Token.EOF, ''),
-        ])
-
-    def testIndent(self):
+    def testSymbol(self):
         self.assertTokens(
-            'def hello\n'
-            '  div :class "world"\n'
-            '    "text"\n'
-            '    div\n'
-            '      div\n'
-            '        "content"\n'
-            '    span "value"\n'
-            '  pre\n',
+            'a foo1 foo.bar foo-bar foo/bar foo_bar Foo',
             [
-                (Token.SYMBOL, 'def'),
-                (Token.SYMBOL, 'hello'),
+                (Token.SYMBOL, 'a'),
+                (Token.SYMBOL, 'foo1'),
+                (Token.SYMBOL, 'foo.bar'),
+                (Token.SYMBOL, 'foo-bar'),
+                (Token.SYMBOL, 'foo/bar'),
+                (Token.SYMBOL, 'foo_bar'),
+                (Token.SYMBOL, 'Foo'),
                 (Token.NEWLINE, '\n'),
-                (Token.INDENT, ''),
-                (Token.SYMBOL, 'div'),
-                (Token.KEYWORD, 'class'),
-                (Token.STRING, 'world'),
-                (Token.NEWLINE, '\n'),
-                (Token.INDENT, ''),
-                (Token.STRING, 'text'),
-                (Token.NEWLINE, '\n'),
-                (Token.SYMBOL, 'div'),
-                (Token.NEWLINE, '\n'),
-                (Token.INDENT, ''),
-                (Token.SYMBOL, 'div'),
-                (Token.NEWLINE, '\n'),
-                (Token.INDENT, ''),
-                (Token.STRING, 'content'),
-                (Token.NEWLINE, '\n'),
-                (Token.DEDENT, ''),
-                (Token.DEDENT, ''),
-                (Token.SYMBOL, 'span'),
-                (Token.STRING, 'value'),
-                (Token.NEWLINE, '\n'),
-                (Token.DEDENT, ''),
-                (Token.SYMBOL, 'pre'),
-                (Token.NEWLINE, '\n'),
-                (Token.DEDENT, ''),
                 (Token.EOF, ''),
             ],
         )
 
-    def testComments(self):
+    def testString(self):
         self.assertTokens(
-            '; comment\n'
-            'def hello\n'
-            '  div :class "world"\n'
-            '    ; whatever\n'
-            '    span "value" ; whatever\n',
+            '"foo" "foo.bar" "foo-bar" "foo/bar" "foo_bar" "Foo" '
+            '":foo" "#foo" "{}" "[]" "()" "123"',
             [
-                (Token.SYMBOL, 'def'),
-                (Token.SYMBOL, 'hello'),
+                (Token.STRING, 'foo'),
+                (Token.STRING, 'foo.bar'),
+                (Token.STRING, 'foo-bar'),
+                (Token.STRING, 'foo/bar'),
+                (Token.STRING, 'foo_bar'),
+                (Token.STRING, 'Foo'),
+                (Token.STRING, ':foo'),
+                (Token.STRING, '#foo'),
+                (Token.STRING, '{}'),
+                (Token.STRING, '[]'),
+                (Token.STRING, '()'),
+                (Token.STRING, '123'),
                 (Token.NEWLINE, '\n'),
-                (Token.INDENT, ''),
-                (Token.SYMBOL, 'div'),
-                (Token.KEYWORD, 'class'),
-                (Token.STRING, 'world'),
+                (Token.EOF, ''),
+            ],
+        )
+
+    def testNumber(self):
+        self.assertTokens(
+            '1 2.3 4.5d 6d.7 8d 9...',
+            [
+                (Token.NUMBER, '1'),
+                (Token.NUMBER, '2.3'),
+                (Token.NUMBER, '4.5d'),
+                (Token.NUMBER, '6d.7'),
+                (Token.NUMBER, '8d'),
+                (Token.NUMBER, '9...'),
                 (Token.NEWLINE, '\n'),
-                (Token.INDENT, ''),
-                (Token.SYMBOL, 'span'),
-                (Token.STRING, 'value'),
-                (Token.NEWLINE, '\n'),
-                (Token.DEDENT, ''),
-                (Token.DEDENT, ''),
                 (Token.EOF, ''),
             ],
         )
 
     def testKeyword(self):
         self.assertTokens(
-            'div :class "red"',
+            ':foo :foo-bar :foo_bar',
             [
-                (Token.SYMBOL, 'div'),
-                (Token.KEYWORD, 'class'),
-                (Token.STRING, 'red'),
+                (Token.KEYWORD, 'foo'),
+                (Token.KEYWORD, 'foo-bar'),
+                (Token.KEYWORD, 'foo_bar'),
+                (Token.NEWLINE, '\n'),
+                (Token.EOF, ''),
+            ],
+        )
+
+    def testPlaceholder(self):
+        self.assertTokens(
+            '#foo #foo-bar #foo_bar',
+            [
+                (Token.PLACEHOLDER, 'foo'),
+                (Token.PLACEHOLDER, 'foo-bar'),
+                (Token.PLACEHOLDER, 'foo_bar'),
                 (Token.NEWLINE, '\n'),
                 (Token.EOF, ''),
             ],
@@ -116,15 +89,66 @@ class TestTokenizer(TestCase):
 
     def testBrackets(self):
         self.assertTokens(
-            '(div\n'
-            '  :class "red")',
+            'foo (bar [baz {:key "value"} "text"] 1)',
             [
+                (Token.SYMBOL, 'foo'),
                 (Token.OPEN_PAREN, '('),
-                (Token.SYMBOL, 'div'),
-                (Token.KEYWORD, 'class'),
-                (Token.STRING, 'red'),
+                (Token.SYMBOL, 'bar'),
+                (Token.OPEN_BRACKET, '['),
+                (Token.SYMBOL, 'baz'),
+                (Token.OPEN_BRACE, '{'),
+                (Token.KEYWORD, 'key'),
+                (Token.STRING, 'value'),
+                (Token.CLOSE_BRACE, '}'),
+                (Token.STRING, 'text'),
+                (Token.CLOSE_BRACKET, ']'),
+                (Token.NUMBER, '1'),
                 (Token.CLOSE_PAREN, ')'),
                 (Token.NEWLINE, '\n'),
+                (Token.EOF, ''),
+            ],
+        )
+
+    def testIndent(self):
+        self.assertTokens(
+            's1\n'
+            '  s11\n'
+            '    s111\n'
+            '  s12\n'
+            '  s13\n'
+            '    s112\n',
+            [
+                (Token.SYMBOL, 's1'), (Token.NEWLINE, '\n'),
+                (Token.INDENT, ''),
+                (Token.SYMBOL, 's11'), (Token.NEWLINE, '\n'),
+                (Token.INDENT, ''),
+                (Token.SYMBOL, 's111'), (Token.NEWLINE, '\n'),
+                (Token.DEDENT, ''),
+                (Token.SYMBOL, 's12'), (Token.NEWLINE, '\n'),
+                (Token.SYMBOL, 's13'), (Token.NEWLINE, '\n'),
+                (Token.INDENT, ''),
+                (Token.SYMBOL, 's112'), (Token.NEWLINE, '\n'),
+                (Token.DEDENT, ''),
+                (Token.DEDENT, ''),
+                (Token.EOF, ''),
+            ]
+        )
+
+    def testComments(self):
+        self.assertTokens(
+            '; comment\n'
+            '; :foo\n'
+            '; #foo\n'
+            '; {} [] ()\n'
+            'foo\n'
+            '  bar ; comment\n',
+            [
+                (Token.SYMBOL, 'foo'),
+                (Token.NEWLINE, '\n'),
+                (Token.INDENT, ''),
+                (Token.SYMBOL, 'bar'),
+                (Token.NEWLINE, '\n'),
+                (Token.DEDENT, ''),
                 (Token.EOF, ''),
             ],
         )

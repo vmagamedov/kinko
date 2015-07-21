@@ -6,15 +6,16 @@ except ImportError:
 from string import ascii_letters, digits, whitespace
 from collections import namedtuple
 
-MATCHING_BRACKET = {
-    '{': '}',
-    '(': ')',
-    '[': ']',
-}
-KEYWORD_CHARS = ascii_letters + digits
-PLACEHOLDER_CHARS = ascii_letters + digits
-SYMBOL_CHARS = ascii_letters + digits
-NUMBER_CHARS = ascii_letters + digits + '.'
+
+MINUS = '-'
+SLASH = '/'
+UNDSCR = '_'
+DOT = '.'
+
+KEYWORD_CHARS = ascii_letters + digits + MINUS + UNDSCR
+PLACEHOLDER_CHARS = ascii_letters + digits + MINUS + UNDSCR
+SYMBOL_CHARS = ascii_letters + digits + MINUS + UNDSCR + DOT + SLASH
+NUMBER_CHARS = ascii_letters + digits + DOT
 
 
 _Token = namedtuple('_Token', 'type value location')
@@ -24,6 +25,7 @@ class Token(_Token):
     KEYWORD = intern('keyword')
     PLACEHOLDER = intern('placeholder')
     NEWLINE = intern('newline')
+    # TODO: remove usages of this token
     DOT = intern('dot')
     STRING = intern('string')
     SYMBOL = intern('symbol')
@@ -46,6 +48,12 @@ BRACKET_TYPES = {
     '}': Token.CLOSE_BRACE,
     ')': Token.CLOSE_PAREN,
     ']': Token.CLOSE_BRACKET,
+}
+
+MATCHING_BRACKET = {
+    '{': '}',
+    '(': ')',
+    '[': ']',
 }
 
 
@@ -211,8 +219,6 @@ def tokenize(string, filename='<string>'):
             yield Token(Token.NEWLINE, '\n', char_iter.location_from(pos))
         elif ch in whitespace:
             continue
-        elif ch == '.':
-            yield Token(Token.DOT, '.', char_iter.location_from(pos))
         elif ch == '"':
             yield read_string(char_iter, pos, '"')
         elif ch in ascii_letters:
