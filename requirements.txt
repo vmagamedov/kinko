@@ -1,4 +1,6 @@
 enum34  # except python3.4
 singledispatch  # except for python3.4
+mock # except for python3.4
 funcparserlib
 astor
+nose
