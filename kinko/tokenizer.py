@@ -39,7 +39,7 @@ class Token(_Token):
     EOF = intern('eof')
 
 
-BRACKET_NAMES = {
+BRACKET_TYPES = {
     '{': Token.OPEN_BRACE,
     '(': Token.OPEN_PAREN,
     '[': Token.OPEN_BRACKET,
@@ -111,13 +111,13 @@ class Chars(object):
         return Location(self.filename, pos, self.next_position)
 
 
-def read_slice(char_iter, valid_chars, name, start=None):
+def read_slice(char_iter, valid_chars, type_, start=None):
     start = start or char_iter.next_position
     while char_iter.peek_in(valid_chars):
         next(char_iter)
     end = char_iter.next_position
-    return (name, char_iter.string[start:end],
-        Location(char_iter.filename, start, end))
+    return Token(type_, char_iter.string[start:end],
+                 Location(char_iter.filename, start, end))
 
 
 def read_string(char_iter, start, quote):
@@ -221,7 +221,7 @@ def tokenize(string, filename='<string>'):
             yield read_slice(char_iter, NUMBER_CHARS, Token.NUMBER, pos)
         elif ch in '([{':
             brackets.append((ch, pos))
-            yield (BRACKET_NAMES[ch], ch, char_iter.location_from(pos))
+            yield Token(BRACKET_TYPES[ch], ch, char_iter.location_from(pos))
         elif ch in '}])':
             if brackets:
                 bch, bpos = brackets.pop()
@@ -232,7 +232,7 @@ def tokenize(string, filename='<string>'):
             else:
                 raise TokenizerError(char_iter.location_from(pos),
                     "No parenthesis matching {!r}".format(ch))
-            yield Token(BRACKET_NAMES[ch], ch, char_iter.location_from(pos))
+            yield Token(BRACKET_TYPES[ch], ch, char_iter.location_from(pos))
         else:
             raise TokenizerError(char_iter.location_from(pos),
                 "Wrong character {!r}".format(ch))
