@@ -25,7 +25,6 @@ class Token(_Token):
     KEYWORD = intern('keyword')
     PLACEHOLDER = intern('placeholder')
     NEWLINE = intern('newline')
-    # TODO: remove usages of this token
     STRING = intern('string')
     SYMBOL = intern('symbol')
     NUMBER = intern('number')

@@ -1,12 +1,13 @@
 from __future__ import absolute_import
 
 from ast import literal_eval
+from itertools import chain
 
-from funcparserlib.parser import forward_decl, maybe, some
+from funcparserlib.parser import forward_decl, maybe, some, oneplus
 from funcparserlib.parser import skip, many
 
 from .nodes import Symbol, String, Placeholder, Keyword, Number, List
-from .nodes import Dict, KeywordPair, Tuple, Dotname
+from .nodes import Dict, Tuple
 from .tokenizer import Token
 
 
@@ -29,51 +30,70 @@ def tok(type_):
     return some(pred).named(u'(a "{}")'.format(type_))
 
 
-def parser():
+_aslist = lambda x: x >> (lambda y: [y])
 
+
+def parser():
     delim = lambda t: skip(tok(t))
 
     symbol = tok(Token.SYMBOL) >> node_gen(Symbol)
-
-    # Note: tokenizer guarantee that value is always quoted string
     string = tok(Token.STRING) >> node_gen(String)
-
     placeholder = tok(Token.PLACEHOLDER) >> node_gen(Placeholder)
     keyword = tok(Token.KEYWORD) >> node_gen(Keyword)
 
     # Note: tokenizer guarantee that value consists of dots and digits
-    # TODO(tailhook) convert exceptions
+    # TODO: convert exceptions
     number = tok(Token.NUMBER) >> node_gen(Number, literal_eval)
 
     expr = forward_decl()
-    tuple_ = forward_decl()
+    implicit_tuple = forward_decl()
 
-    dotname = symbol + many(delim(Token.DOT) + symbol) \
-        >> (lambda t: Dotname(*t))
-    list_ = (delim(Token.OPEN_BRACKET) + many(expr) +
-             delim(Token.CLOSE_BRACKET)) >> List
-    dict_ = (delim(Token.OPEN_BRACE) +
-        many(keyword + expr) +
-        delim(Token.CLOSE_BRACE)) >> Dict
-    inline_keyword = keyword + expr >> (lambda t: KeywordPair(*t))
-    block_keyword = ((keyword + expr + delim(Token.NEWLINE)) |
-        (keyword + delim(Token.NEWLINE) +
-         delim(Token.INDENT) + many(tuple_) + delim(Token.DEDENT))
-         ) >> (lambda t: KeywordPair(*t))
+    list_ = ((delim(Token.OPEN_BRACKET) +
+              many(expr | keyword) +
+              delim(Token.CLOSE_BRACKET))
+             >> (lambda x: List(*x)))
 
-    paren_tuple = (delim(Token.OPEN_PAREN) +
-        symbol + many(expr) +
-        delim(Token.CLOSE_PAREN)) >> (lambda pair: Tuple(*pair))
-    tuple_.define(
-        (symbol + many(expr | inline_keyword) + delim(Token.NEWLINE) +
-        maybe(delim(Token.INDENT) +
-            many(tuple_|placeholder|block_keyword |
-                ((string|number) + delim(Token.NEWLINE))) +
-            delim(Token.DEDENT)))
-        >> (lambda triple: Tuple(triple[0], triple[1]+(triple[2] or []))))
-    expr.define(dotname | paren_tuple | string | number | dict_ | list_ |
-        placeholder)
+    dict_ = ((delim(Token.OPEN_BRACE) +
+              many(keyword + expr) +
+              delim(Token.CLOSE_BRACE))
+             >> (lambda x: Dict(*chain(*x))))
 
-    body = many(tuple_) + delim(Token.EOF)
+    inline_args = many(expr | keyword)
 
+    explicit_tuple = (
+        (delim(Token.OPEN_PAREN) +
+         symbol + inline_args +
+         delim(Token.CLOSE_PAREN))
+        >> (lambda x: Tuple(x[0], *x[1]))
+    )
+
+    indented_arg = (
+        oneplus(implicit_tuple | expr + delim(Token.NEWLINE))
+        >> (lambda x: x[0] if len(x) == 1 else Tuple(Symbol('join'), *x))
+    )
+
+    indented_kwarg = (
+        ((keyword + expr + delim(Token.NEWLINE)) |
+         (keyword + delim(Token.NEWLINE) +
+          delim(Token.INDENT) + indented_arg + delim(Token.DEDENT)))
+        >> (lambda x: tuple(x))
+    )
+
+    indented_kwargs = (
+        oneplus(indented_kwarg)
+        >> (lambda x: list(chain(*x)))
+    )
+
+    implicit_tuple.define(
+        (symbol + inline_args + delim(Token.NEWLINE) +
+         maybe(delim(Token.INDENT) +
+               (_aslist(indented_arg) | indented_kwargs) +
+               delim(Token.DEDENT)))
+        >> (lambda x: Tuple(x[0], *(x[1] + (x[2] or []))))
+    )
+
+    expr.define(symbol | string | number | explicit_tuple | list_ | dict_ |
+                placeholder)
+
+    body = many(implicit_tuple) + delim(Token.EOF)
     return body
