@@ -26,7 +26,6 @@ class Token(_Token):
     PLACEHOLDER = intern('placeholder')
     NEWLINE = intern('newline')
     # TODO: remove usages of this token
-    DOT = intern('dot')
     STRING = intern('string')
     SYMBOL = intern('symbol')
     NUMBER = intern('number')
@@ -39,6 +38,11 @@ class Token(_Token):
     INDENT = intern('indent')
     DEDENT = intern('dedent')
     EOF = intern('eof')
+
+    def __repr__(self):
+        return '<{} {!r} {}:{}>'.format(self.type, self.value,
+                                        self.location.start.line,
+                                        self.location.start.column)
 
 
 BRACKET_TYPES = {
@@ -70,7 +74,7 @@ class _Interrupt(Exception):
     pass
 
 
-_Position = namedtuple('_Position', 'offset line column')
+_Position = namedtuple('Position', 'offset line column')
 
 class Position(_Position):
 

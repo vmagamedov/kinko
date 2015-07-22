@@ -17,12 +17,7 @@ class Symbol(Node):
         super(Symbol, self).__init__(**kw)
 
     def __repr__(self):
-        return '<{}({})>'.format(self.__class__.__name__, self.name)
-
-    @classmethod
-    def from_token(Symbol, tok):
-        kind, value, location = tok
-        return Symbol(value, location=location)
+        return self.name
 
 
 class String(Node):
@@ -32,7 +27,7 @@ class String(Node):
         super(String, self).__init__(**kw)
 
     def __repr__(self):
-        return '<{}({!r})>'.format(self.__class__.__name__, self.value)
+        return '"{}"'.format(self.value.replace('"', '\\"'))
 
 
 class Number(Node):
@@ -40,6 +35,9 @@ class Number(Node):
     def __init__(self, value, **kw):
         self.value = value
         super(Number, self).__init__(**kw)
+
+    def __repr__(self):
+        return repr(self.value)
 
 
 class Keyword(Node):
@@ -49,15 +47,7 @@ class Keyword(Node):
         super(Keyword, self).__init__(**kw)
 
     def __repr__(self):
-        return '<{}({})>'.format(self.__class__.__name__, self.name)
-
-
-class KeywordPair(Node):
-
-    def __init__(self, keyword, value, **kw):
-        self.keyword = keyword
-        self.value = value
-        super(KeywordPair, self).__init__(**kw)
+        return ':{}'.format(self.name)
 
 
 class Placeholder(Node):
@@ -67,39 +57,34 @@ class Placeholder(Node):
         super(Placeholder, self).__init__(**kw)
 
     def __repr__(self):
-        return '<{}({})>'.format(self.__class__.__name__, self.name)
+        return '#{}'.format(self.name)
 
 
 class Tuple(Node):
 
-    def __init__(self, symbol, args, **kw):
-        self.symbol = symbol
-        self.args = args
+    def __init__(self, *args, **kw):
+        self.args = tuple(args)
         super(Tuple, self).__init__(**kw)
 
     def __repr__(self):
-        return '<{} {} {}>'.format(self.__class__.__name__,
-                                   self.symbol,
-                                   ' '.join(map(repr, self.args)))
+        return '({})'.format(' '.join(map(repr, self.args)))
 
 
 class List(Node):
 
-    def __init__(self, values, **kw):
-        self.values = values
+    def __init__(self, *values, **kw):
+        self.values = tuple(values)
         super(List, self).__init__(**kw)
+
+    def __repr__(self):
+        return '[{}]'.format(' '.join(map(repr, self.values)))
 
 
 class Dict(Node):
 
-    def __init__(self, pairs, **kw):
-        self.pairs = pairs
+    def __init__(self, *values, **kw):
+        self.values = tuple(values)
         super(Dict, self).__init__(**kw)
 
-
-class Dotname(Node):
-
-    def __init__(self, item, attrs, **kw):
-        self.item = item
-        self.attrs = attrs
-        super(Dotname, self).__init__(**kw)
+    def __repr__(self):
+        return '{{{}}}'.format(' '.join(map(repr, self.values)))
