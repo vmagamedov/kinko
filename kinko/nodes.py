@@ -62,7 +62,7 @@ class Placeholder(Node):
 
 class Tuple(Node):
 
-    def __init__(self, *args, **kw):
+    def __init__(self, args, **kw):
         self.args = tuple(args)
         super(Tuple, self).__init__(**kw)
 
@@ -72,7 +72,7 @@ class Tuple(Node):
 
 class List(Node):
 
-    def __init__(self, *values, **kw):
+    def __init__(self, values, **kw):
         self.values = tuple(values)
         super(List, self).__init__(**kw)
 
@@ -82,7 +82,7 @@ class List(Node):
 
 class Dict(Node):
 
-    def __init__(self, *values, **kw):
+    def __init__(self, values, **kw):
         self.values = tuple(values)
         super(Dict, self).__init__(**kw)
 

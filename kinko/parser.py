@@ -30,7 +30,7 @@ def tok(type_):
     return some(pred).named(u'(a "{}")'.format(type_))
 
 
-_aslist = lambda x: x >> (lambda y: [y])
+_as_list = lambda x: x >> (lambda y: [y])
 
 
 def parser():
@@ -51,12 +51,12 @@ def parser():
     list_ = ((delim(Token.OPEN_BRACKET) +
               many(expr | keyword) +
               delim(Token.CLOSE_BRACKET))
-             >> (lambda x: List(*x)))
+             >> (lambda x: List(x)))
 
     dict_ = ((delim(Token.OPEN_BRACE) +
               many(keyword + expr) +
               delim(Token.CLOSE_BRACE))
-             >> (lambda x: Dict(*chain(*x))))
+             >> (lambda x: Dict(chain(*x))))
 
     inline_args = many(expr | keyword)
 
@@ -64,12 +64,12 @@ def parser():
         (delim(Token.OPEN_PAREN) +
          symbol + inline_args +
          delim(Token.CLOSE_PAREN))
-        >> (lambda x: Tuple(x[0], *x[1]))
+        >> (lambda x: Tuple([x[0]] + x[1]))
     )
 
     indented_arg = (
         oneplus(implicit_tuple | expr + delim(Token.NEWLINE))
-        >> (lambda x: x[0] if len(x) == 1 else Tuple(Symbol('join'), *x))
+        >> (lambda x: x[0] if len(x) == 1 else Tuple([Symbol('join')] + x))
     )
 
     indented_kwarg = (
@@ -87,13 +87,16 @@ def parser():
     implicit_tuple.define(
         (symbol + inline_args + delim(Token.NEWLINE) +
          maybe(delim(Token.INDENT) +
-               (_aslist(indented_arg) | indented_kwargs) +
+               (_as_list(indented_arg) | indented_kwargs) +
                delim(Token.DEDENT)))
-        >> (lambda x: Tuple(x[0], *(x[1] + (x[2] or []))))
+        >> (lambda x: Tuple([x[0]] + x[1] + (x[2] or [])))
     )
 
     expr.define(symbol | string | number | explicit_tuple | list_ | dict_ |
                 placeholder)
 
-    body = many(implicit_tuple) + delim(Token.EOF)
+    body = (
+        (many(implicit_tuple) + delim(Token.EOF))
+        >> (lambda x: List(x))
+    )
     return body

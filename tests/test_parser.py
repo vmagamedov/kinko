@@ -45,48 +45,62 @@ class TestParser(TestCase):
     def testImplicitTuple(self):
         self.assertEqual(
             self.parse('foo :bar 5 "baz"'),
-            [Tuple(Symbol('foo'), Keyword('bar'), Number(5), String('baz'))],
+            List([
+                Tuple([Symbol('foo'),
+                       Keyword('bar'), Number(5), String('baz')]),
+            ]),
         )
 
     def testExplicitTuple(self):
         self.assertEqual(
             self.parse('foo (bar 5) "baz"'),
-            [Tuple(Symbol('foo'), Tuple(Symbol('bar'), Number(5)),
-                   String('baz'))],
+            List([
+                Tuple([Symbol('foo'), Tuple([Symbol('bar'), Number(5)]),
+                       String('baz')]),
+            ]),
         )
 
     def testList(self):
         self.assertEqual(
             self.parse('foo [:k1 v1 1 (foo 2)]'),
-            [Tuple(Symbol('foo'),
-                   List(Keyword('k1'),
-                        Symbol('v1'),
-                        Number(1),
-                        Tuple(Symbol('foo'), Number(2))))],
+            List([
+                Tuple([Symbol('foo'),
+                       List([Keyword('k1'),
+                             Symbol('v1'),
+                             Number(1),
+                             Tuple([Symbol('foo'), Number(2)])])]),
+            ]),
         )
 
     def testDict(self):
         self.assertEqual(
             self.parse('foo {:k1 v1 :k2 (v2 3)}'),
-            [Tuple(Symbol('foo'),
-                   Dict(Keyword('k1'), Symbol('v1'),
-                        Keyword('k2'), Tuple(Symbol('v2'), Number(3))))],
+            List([
+                Tuple([Symbol('foo'),
+                       Dict([Keyword('k1'), Symbol('v1'),
+                             Keyword('k2'), Tuple([Symbol('v2'),
+                                                   Number(3)])])]),
+            ]),
         )
 
     def testIndent(self):
         self.assertEqual(
             self.parse('foo\n'
                        '  "bar"'),
-            [Tuple(Symbol('foo'), String('bar'))],
+            List([
+                Tuple([Symbol('foo'), String('bar')]),
+            ]),
         )
         self.assertEqual(
             self.parse('foo\n'
                        '  "bar"\n'
                        '  5\n'
                        '  "baz"'),
-            [Tuple(Symbol('foo'),
-                   Tuple(Symbol('join'),
-                         String('bar'), Number(5), String('baz')))],
+            List([
+                Tuple([Symbol('foo'),
+                       Tuple([Symbol('join'),
+                              String('bar'), Number(5), String('baz')])]),
+            ]),
         )
 
     def testNestedIndent(self):
@@ -96,10 +110,12 @@ class TestParser(TestCase):
                        '    1\n'
                        '  baz\n'
                        '    2'),
-            [Tuple(Symbol('foo'),
-                   Tuple(Symbol('join'),
-                         Tuple(Symbol('bar'), Number(1)),
-                         Tuple(Symbol('baz'), Number(2))))],
+            List([
+                Tuple([Symbol('foo'),
+                       Tuple([Symbol('join'),
+                              Tuple([Symbol('bar'), Number(1)]),
+                              Tuple([Symbol('baz'), Number(2)])])]),
+            ]),
         )
 
     def testIndentedKeywords(self):
@@ -108,8 +124,10 @@ class TestParser(TestCase):
                        '  :k2 v2\n'
                        '  :k3\n'
                        '    v3'),
-            [Tuple(Symbol('foo'),
-                   Keyword('k1'), Symbol('v1'),
-                   Keyword('k2'), Symbol('v2'),
-                   Keyword('k3'), Tuple(Symbol('v3')))],
+            List([
+                Tuple([Symbol('foo'),
+                       Keyword('k1'), Symbol('v1'),
+                       Keyword('k2'), Symbol('v2'),
+                       Keyword('k3'), Tuple([Symbol('v3')])]),
+            ]),
         )
