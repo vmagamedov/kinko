@@ -42,6 +42,21 @@ class TestParser(TestCase):
             print(tokens)
             raise
 
+    def testSymbol(self):
+        self.assertEqual(
+            self.parse('print foo foo.bar foo.bar.baz'),
+            List([
+                Tuple([Symbol('print'),
+                       Symbol('foo'),
+                       Tuple([Symbol('get'),
+                              Symbol('foo'), Symbol('bar')]),
+                       Tuple([Symbol('get'),
+                              Tuple([Symbol('get'),
+                                     Symbol('foo'), Symbol('bar')]),
+                              Symbol('baz')])]),
+            ]),
+        )
+
     def testImplicitTuple(self):
         self.assertEqual(
             self.parse('foo :bar 5 "baz"'),

@@ -1,7 +1,12 @@
 from __future__ import absolute_import
 
 from ast import literal_eval
+from functools import partial
 from itertools import chain
+try:
+    from functools import reduce
+except ImportError:
+    pass
 
 from funcparserlib.parser import forward_decl, maybe, some, oneplus
 from funcparserlib.parser import skip, many
@@ -14,14 +19,20 @@ from .tokenizer import Token
 def node_gen(node_cls, coerce_=None):
     if coerce_ is None:
         def proc(token):
-            _, value, location = token
-            return node_cls(value, location=location)
+            return node_cls(token.value, location=token.location)
     else:
         def proc(token):
-            _, value, location = token
-            value = coerce_(value)
-            return node_cls(value, location=location)
+            return node_cls(coerce_(token.value), location=token.location)
     return proc
+
+
+def symbol_gen(token):
+    # TODO: validate symbol name
+    sym = partial(Symbol, location=token.location)
+    parts = token.value.split('.')
+    head, tail = parts[0], parts[1:]
+    return reduce(lambda value, attr: Tuple([sym('get'), value, sym(attr)]),
+                  tail, sym(head))
 
 
 def tok(type_):
@@ -36,7 +47,7 @@ _as_list = lambda x: x >> (lambda y: [y])
 def parser():
     delim = lambda t: skip(tok(t))
 
-    symbol = tok(Token.SYMBOL) >> node_gen(Symbol)
+    symbol = tok(Token.SYMBOL) >> symbol_gen
     string = tok(Token.STRING) >> node_gen(String)
     placeholder = tok(Token.PLACEHOLDER) >> node_gen(Placeholder)
     keyword = tok(Token.KEYWORD) >> node_gen(Keyword)
