@@ -10,10 +10,10 @@ def split_args(args):
     i = iter(args)
     try:
         while True:
-            arg = i.next()
+            arg = next(i)
             if isinstance(arg, Keyword):
                 try:
-                    val = i.next()
+                    val = next(i)
                 except StopIteration:
                     raise TypeError('Missing named argument value')
                 else:

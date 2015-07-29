@@ -1,3 +1,6 @@
+from .compat import with_metaclass
+
+
 class TypingMeta(type):
 
     def __init__(cls, *args, **kwargs):
@@ -19,8 +22,8 @@ class FuncMeta(TypingMeta):
         return '{}[{!r}, {!r}]'.format(cls.__name__, cls.__args__,
                                        cls.__result__)
 
-class Func(object):
-    __metaclass__ = FuncMeta
+class Func(with_metaclass(FuncMeta, object)):
+    pass
 
 
 class VarArgsMeta(TypingMeta):
@@ -33,8 +36,8 @@ class VarArgsMeta(TypingMeta):
     def __repr__(cls):
         return '{}[{!r}]'.format(cls.__name__, cls.__arg_type__)
 
-class VarArgs(object):
-    __metaclass__ = VarArgsMeta
+class VarArgs(with_metaclass(VarArgsMeta, object)):
+    pass
 
 
 class NamedArgMeta(TypingMeta):
@@ -48,8 +51,8 @@ class NamedArgMeta(TypingMeta):
         return '{}[{}={!r}]'.format(cls.__name__, cls.__arg_name__,
                                     cls.__arg_type__)
 
-class NamedArg(object):
-    __metaclass__ = NamedArgMeta
+class NamedArg(with_metaclass(NamedArgMeta, object)):
+    pass
 
 
 class QuotedMeta(TypingMeta):
@@ -62,15 +65,18 @@ class QuotedMeta(TypingMeta):
     def __repr__(cls):
         return '{}[{!r}]'.format(cls.__name__, cls.__arg_type__)
 
-class Quoted(object):
-    __metaclass__ = QuotedMeta
+class Quoted(with_metaclass(QuotedMeta, object)):
 
     def __init__(self, value):
         self.__quoted_value__ = value
 
 
-StringType = unicode
-IntType = long
+class StringType(object):
+    pass
+
+
+class IntType(object):
+    pass
 
 
 class DictTypeMeta(TypingMeta):
@@ -85,8 +91,8 @@ class DictTypeMeta(TypingMeta):
                                       cls.__value_type__)
 
 
-class DictType(object):
-    __metaclass__ = DictTypeMeta
+class DictType(with_metaclass(DictTypeMeta, object)):
+    pass
 
 
 class OutputType(object):
@@ -97,13 +103,16 @@ class SymbolType(object):
     pass
 
 
-class CollectionType(object):
-    class __metaclass__(TypingMeta):
+class CollectionTypeMeta(TypingMeta):
 
-        def __new__(typ, name, bases, namespace, item_type=None):
-            cls = TypingMeta.__new__(typ, name, bases, namespace)
-            cls.__item_type__ = item_type
-            return cls
+    def __new__(typ, name, bases, namespace, item_type=None):
+        cls = TypingMeta.__new__(typ, name, bases, namespace)
+        cls.__item_type__ = item_type
+        return cls
 
-        def __repr__(cls):
-            return '{}[{!r}]'.format(cls.__name__, cls.__item_type__)
+    def __repr__(cls):
+        return '{}[{!r}]'.format(cls.__name__, cls.__item_type__)
+
+
+class CollectionType(with_metaclass(CollectionTypeMeta, object)):
+    pass

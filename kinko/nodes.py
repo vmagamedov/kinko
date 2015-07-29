@@ -62,12 +62,12 @@ class Placeholder(Node):
 
 class Tuple(Node):
 
-    def __init__(self, args, **kw):
-        self.args = tuple(args)
+    def __init__(self, values, **kw):
+        self.values = tuple(values)
         super(Tuple, self).__init__(**kw)
 
     def __repr__(self):
-        return '({})'.format(' '.join(map(repr, self.args)))
+        return '({})'.format(' '.join(map(repr, self.values)))
 
 
 class List(Node):
