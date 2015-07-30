@@ -2,16 +2,22 @@ import difflib
 from textwrap import dedent
 from unittest import TestCase
 
+try:
+    from unittest.mock import Mock
+except ImportError:
+    from mock import Mock
+
 from funcparserlib.parser import NoParseError
 
 from kinko.parser import parser
-from kinko.compiler import compile_, dumps
+from kinko.compat import _exec_in
+from kinko.compiler import compile_module, dumps
 from kinko.tokenizer import tokenize
 
 
 class TestCompile(TestCase):
 
-    def compile(self, src):
+    def parse(self, src):
         src = dedent(src).strip() + '\n'
         tokens = list(tokenize(src))
         try:
@@ -20,11 +26,10 @@ class TestCompile(TestCase):
             print(tokens)
             raise
         else:
-            return list(compile_(body.values[0]))
+            return body
 
     def assertCompiles(self, src, code):
-        py_ast = self.compile(src)
-        first = '\n'.join(map(dumps, py_ast))
+        first = dumps(compile_module(self.parse(src)))
         second = dedent(code).strip()
         if first != second:
             msg = ('Compiled code is not equal:\n\n{}'
@@ -161,3 +166,32 @@ class TestCompile(TestCase):
                     buf.write('</div>')
             """,
         )
+
+    def testCompile(self):
+        mod = compile_module(self.parse("""
+        def foo
+          div
+            each i items
+              div i
+        """))
+        mod_code = compile(mod, '<kinko-template>', 'exec')
+
+        output = []
+
+        buf = Mock()
+        buf.write = lambda s: output.append(s)
+
+        ctx = Mock()
+        ctx.items = [1, 2, 3]
+
+        ns = {'buf': buf, 'ctx': ctx}
+        _exec_in(mod_code, ns)
+
+        ns['foo']()
+        self.assertEqual(output, [
+            '<div', '>',
+            '<div', '>', 1, '</div>',
+            '<div', '>', 2, '</div>',
+            '<div', '>', 3, '</div>',
+            '</div>',
+        ])

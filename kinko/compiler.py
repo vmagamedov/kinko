@@ -1,31 +1,41 @@
+from itertools import chain
+
 import astor
 
-from kinko.nodes import String, Tuple, Symbol
+from kinko.nodes import String, Tuple, Symbol, List
 from kinko.compat import ast as py
 from kinko.checker import split_args
 
 
 def _write(value):
-    return py.Call(py.Attribute(py.Name('buf', True), 'write', True),
-                   [value], [], None, None)
-
-
-def _ctx_var(name):
-    return py.Attribute(py.Name('ctx', True), name, True)
+    return py.Expr(py.Call(
+        py.Attribute(py.Name('buf', py.Load()), 'write', py.Load()),
+        [value], [], None, None,
+    ))
 
 
 def _write_str(value):
     return _write(py.Str(value))
 
 
+def _ctx_load(name):
+    return py.Attribute(py.Name('ctx', py.Load()), name, py.Load())
+
+
+def _ctx_store(name):
+    return py.Attribute(py.Name('ctx', py.Load()), name, py.Store())
+
+
 def _capture(node, name):
-    yield py.Call(py.Attribute(py.Name('buf', True), 'push', True),
-                  [], [], None, None)
+    yield py.Expr(py.Call(
+        py.Attribute(py.Name('buf', py.Load()), 'push', py.Load()),
+        [], [], None, None,
+    ))
     for item in compile_(node):
         yield item
-    yield py.Assign([py.Name(name, True)],
-                    py.Call(py.Attribute(py.Name('buf', True),
-                                         'pop', True),
+    yield py.Assign([py.Name(name, py.Store())],
+                    py.Call(py.Attribute(py.Name('buf', py.Load()),
+                                         'pop', py.Load()),
                             [], [], None, None))
 
 
@@ -38,8 +48,7 @@ def compile_(node):
             placeholders = []  # TODO: extract placeholders from body
             yield py.FunctionDef(name_sym.name,
                                  py.arguments(placeholders, None, None, []),
-                                 map(py.Expr, compile_(body)),
-                                 [])
+                                 list(compile_(body)), [])
 
         elif sym.name == 'div':
             yield _write_str('<div')
@@ -56,10 +65,8 @@ def compile_(node):
 
         elif sym.name == 'each':
             var, col, body = pos_args
-            yield py.For(_ctx_var(var.name),
-                         _ctx_var(col.name),
-                         map(py.Expr, compile_(body)),
-                         [])
+            yield py.For(_ctx_store(var.name), _ctx_load(col.name),
+                         list(compile_(body)), [])
 
         elif sym.name == 'join':
             for arg in pos_args:
@@ -87,14 +94,17 @@ def compile_(node):
                 kw_value_vars.append(var_name)
                 i += 1
 
-            yield py.Call(py.Name(sym.name, True),
-                          [py.Name(var, True) for var in pos_value_vars],
-                          [py.keyword(key, py.Name(value, True))
-                           for key, value in zip(kw_names, kw_value_vars)],
-                          None, None)
+            yield py.Expr(py.Call(
+                py.Name(sym.name, py.Load()),
+                [py.Name(var, py.Load()) for var in pos_value_vars],
+                [py.keyword(key, py.Name(value, py.Load()))
+                 for key, value in zip(kw_names, kw_value_vars)],
+                None,
+                None,
+            ))
 
     elif isinstance(node, Symbol):
-        yield _write(_ctx_var(node.name))
+        yield _write(_ctx_load(node.name))
 
     elif isinstance(node, String):
         yield _write_str(node.value)
@@ -104,5 +114,14 @@ def compile_(node):
                         .format(node, type(node)))
 
 
-def dumps(ast):
-    return astor.to_source(ast)
+def compile_module(body):
+    assert isinstance(body, List), repr(body)
+    mod = py.Module(list(chain.from_iterable(
+        compile_(n) for n in body.values
+    )))
+    py.fix_missing_locations(mod)
+    return mod
+
+
+def dumps(node):
+    return astor.to_source(node)

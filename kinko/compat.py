@@ -22,19 +22,34 @@ class _AST(object):
     def __getattr__(self, name):
         return getattr(_ast, name)
 
-    @staticmethod
-    def arguments(args, vararg, kwarg, defaults):
-        if PY3:
-            return _ast.arguments(args, vararg, None, [], kwarg, defaults)
-        else:
+    if PY3:
+        @staticmethod
+        def arguments(args, vararg, kwarg, defaults):
+            return _ast.arguments(args, vararg, [], [], kwarg, defaults)
+
+        @staticmethod
+        def FunctionDef(name, args, body, decorator_list):
+            return _ast.FunctionDef(name, args, body, decorator_list, None)
+
+    else:
+        @staticmethod
+        def arguments(args, vararg, kwarg, defaults):
             return _ast.arguments(args, vararg, kwarg, defaults)
 
-    @staticmethod
-    def FunctionDef(name, args, body, decorator_list):
-        if PY3:
-            return _ast.FunctionDef(name, args, body, decorator_list, None)
-        else:
+        @staticmethod
+        def FunctionDef(name, args, body, decorator_list):
             return _ast.FunctionDef(name, args, body, decorator_list)
 
 
 ast = _AST()
+
+
+if PY3:
+    import builtins
+
+    def _exec_in(source, globals_dict):
+        getattr(builtins, 'exec')(source, globals_dict)
+
+else:
+    def _exec_in(source, globals_dict):
+        exec('exec source in globals_dict')
