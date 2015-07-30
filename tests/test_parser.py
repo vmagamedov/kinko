@@ -8,7 +8,8 @@ from funcparserlib.parser import NoParseError
 
 from kinko.nodes import Node, Symbol, Tuple, String, Number, Keyword, Dict, List
 from kinko.parser import parser
-from kinko.tokenizer import tokenize
+
+from .test_tokenizer import TokenizeMixin
 
 
 def node_eq(self, other):
@@ -25,7 +26,18 @@ def node_ne(self, other):
     return not self.__eq__(other)
 
 
-class TestParser(TestCase):
+class ParseMixin(TokenizeMixin):
+
+    def parse(self, src):
+        tokens = list(self.tokenize(src))
+        try:
+            return parser().parse(tokens)
+        except NoParseError:
+            print(tokens)
+            raise
+
+
+class TestParser(ParseMixin, TestCase):
 
     def setUp(self):
         self.node_patcher = patch.multiple(Node, __eq__=node_eq, __ne__=node_ne)
@@ -34,17 +46,12 @@ class TestParser(TestCase):
     def tearDown(self):
         self.node_patcher.stop()
 
-    def parse(self, text):
-        tokens = list(tokenize(text))
-        try:
-            return parser().parse(tokens)
-        except NoParseError:
-            print(tokens)
-            raise
+    def assertParse(self, src, node):
+        return self.assertEqual(self.parse(src), node)
 
     def testSymbol(self):
-        self.assertEqual(
-            self.parse('print foo foo.bar foo.bar.baz'),
+        self.assertParse(
+            'print foo foo.bar foo.bar.baz',
             List([
                 Tuple([Symbol('print'),
                        Symbol('foo'),
@@ -58,8 +65,8 @@ class TestParser(TestCase):
         )
 
     def testImplicitTuple(self):
-        self.assertEqual(
-            self.parse('foo :bar 5 "baz"'),
+        self.assertParse(
+            'foo :bar 5 "baz"',
             List([
                 Tuple([Symbol('foo'),
                        Keyword('bar'), Number(5), String('baz')]),
@@ -67,8 +74,8 @@ class TestParser(TestCase):
         )
 
     def testExplicitTuple(self):
-        self.assertEqual(
-            self.parse('foo (bar 5) "baz"'),
+        self.assertParse(
+            'foo (bar 5) "baz"',
             List([
                 Tuple([Symbol('foo'), Tuple([Symbol('bar'), Number(5)]),
                        String('baz')]),
@@ -76,8 +83,8 @@ class TestParser(TestCase):
         )
 
     def testList(self):
-        self.assertEqual(
-            self.parse('foo [:k1 v1 1 (foo 2)]'),
+        self.assertParse(
+            'foo [:k1 v1 1 (foo 2)]',
             List([
                 Tuple([Symbol('foo'),
                        List([Keyword('k1'),
@@ -88,8 +95,8 @@ class TestParser(TestCase):
         )
 
     def testDict(self):
-        self.assertEqual(
-            self.parse('foo {:k1 v1 :k2 (v2 3)}'),
+        self.assertParse(
+            'foo {:k1 v1 :k2 (v2 3)}',
             List([
                 Tuple([Symbol('foo'),
                        Dict([Keyword('k1'), Symbol('v1'),
@@ -99,18 +106,22 @@ class TestParser(TestCase):
         )
 
     def testIndent(self):
-        self.assertEqual(
-            self.parse('foo\n'
-                       '  "bar"'),
+        self.assertParse(
+            """
+            foo
+              "bar"
+            """,
             List([
                 Tuple([Symbol('foo'), String('bar')]),
             ]),
         )
-        self.assertEqual(
-            self.parse('foo\n'
-                       '  "bar"\n'
-                       '  5\n'
-                       '  "baz"'),
+        self.assertParse(
+            """
+            foo
+              "bar"
+              5
+              "baz"
+            """,
             List([
                 Tuple([Symbol('foo'),
                        Tuple([Symbol('join'),
@@ -119,12 +130,14 @@ class TestParser(TestCase):
         )
 
     def testNestedIndent(self):
-        self.assertEqual(
-            self.parse('foo\n'
-                       '  bar\n'
-                       '    1\n'
-                       '  baz\n'
-                       '    2'),
+        self.assertParse(
+            """
+            foo
+              bar
+                1
+              baz
+                2
+            """,
             List([
                 Tuple([Symbol('foo'),
                        Tuple([Symbol('join'),
@@ -134,11 +147,13 @@ class TestParser(TestCase):
         )
 
     def testIndentedKeywords(self):
-        self.assertEqual(
-            self.parse('foo :k1 v1\n'
-                       '  :k2 v2\n'
-                       '  :k3\n'
-                       '    v3'),
+        self.assertParse(
+            """
+            foo :k1 v1
+              :k2 v2
+              :k3
+                v3
+            """,
             List([
                 Tuple([Symbol('foo'),
                        Keyword('k1'), Symbol('v1'),

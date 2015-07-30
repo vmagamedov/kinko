@@ -1,13 +1,21 @@
+from textwrap import dedent
 from unittest import TestCase
 
 from kinko.tokenizer import Token, tokenize
 
 
-class TestTokenizer(TestCase):
+class TokenizeMixin(object):
+
+    def tokenize(self, src):
+        src = dedent(src).strip() + '\n'
+        return tokenize(src)
+
+
+class TestTokenizer(TokenizeMixin, TestCase):
     maxDiff = 1000
 
     def assertTokens(self, string, tokens):
-        left = [(kind, value) for (kind, value, loc) in tokenize(string)]
+        left = [(kind, value) for (kind, value, loc) in self.tokenize(string)]
         self.assertEqual(left, tokens)
 
     def testSymbol(self):
@@ -111,12 +119,14 @@ class TestTokenizer(TestCase):
 
     def testIndent(self):
         self.assertTokens(
-            's1\n'
-            '  s11\n'
-            '    s111\n'
-            '  s12\n'
-            '  s13\n'
-            '    s112\n',
+            """
+            s1
+              s11
+                s111
+              s12
+              s13
+                s112
+            """,
             [
                 (Token.SYMBOL, 's1'), (Token.NEWLINE, '\n'),
                 (Token.INDENT, ''),
@@ -136,12 +146,14 @@ class TestTokenizer(TestCase):
 
     def testComments(self):
         self.assertTokens(
-            '; comment\n'
-            '; :foo\n'
-            '; #foo\n'
-            '; {} [] ()\n'
-            'foo\n'
-            '  bar ; comment\n',
+            """
+            ; comment
+            ; :foo
+            ; #foo
+            ; {} [] ()
+            foo
+              bar ; comment
+            """,
             [
                 (Token.SYMBOL, 'foo'),
                 (Token.NEWLINE, '\n'),

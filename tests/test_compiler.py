@@ -7,26 +7,13 @@ try:
 except ImportError:
     from mock import Mock
 
-from funcparserlib.parser import NoParseError
-
-from kinko.parser import parser
 from kinko.compat import _exec_in
 from kinko.compiler import compile_module, dumps
-from kinko.tokenizer import tokenize
+
+from .test_parser import ParseMixin
 
 
-class TestCompile(TestCase):
-
-    def parse(self, src):
-        src = dedent(src).strip() + '\n'
-        tokens = list(tokenize(src))
-        try:
-            body = parser().parse(tokens)
-        except NoParseError:
-            print(tokens)
-            raise
-        else:
-            return body
+class TestCompile(ParseMixin, TestCase):
 
     def assertCompiles(self, src, code):
         first = dumps(compile_module(self.parse(src)))
