@@ -154,6 +154,82 @@ class TestCompile(ParseMixin, TestCase):
             """,
         )
 
+    def testIf(self):
+        self.assertCompiles(
+            """
+            if-stmt 1
+              :then
+                div "Trueish"
+              :else
+                div "Falseish"
+            """,
+            """
+            if 1:
+                buf.write('<div')
+                buf.write('>')
+                buf.write('Trueish')
+                buf.write('</div>')
+            else:
+                buf.write('<div')
+                buf.write('>')
+                buf.write('Falseish')
+                buf.write('</div>')
+            """,
+        )
+        self.assertCompiles(
+            """
+            if-stmt 1
+              :then
+                div "Trueish"
+            """,
+            """
+            if 1:
+                buf.write('<div')
+                buf.write('>')
+                buf.write('Trueish')
+                buf.write('</div>')
+            """,
+        )
+        self.assertCompiles(
+            """
+            if-stmt 1
+              div "Trueish"
+            """,
+            """
+            if 1:
+                buf.write('<div')
+                buf.write('>')
+                buf.write('Trueish')
+                buf.write('</div>')
+            """,
+        )
+        self.assertCompiles(
+            """
+            div :class (if-expr 1 "true" "false")
+            """,
+            """
+            buf.write('<div')
+            buf.write(' class="')
+            buf.write(('true' if 1 else 'false'))
+            buf.write('"')
+            buf.write('>')
+            buf.write('</div>')
+            """,
+        )
+        self.assertCompiles(
+            """
+            div :class (if-expr 1 "true")
+            """,
+            """
+            buf.write('<div')
+            buf.write(' class="')
+            buf.write(('true' if 1 else None))
+            buf.write('"')
+            buf.write('>')
+            buf.write('</div>')
+            """,
+        )
+
     def testCompile(self):
         mod = compile_module(self.parse("""
         def foo

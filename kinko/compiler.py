@@ -2,7 +2,7 @@ from itertools import chain
 
 import astor
 
-from kinko.nodes import String, Tuple, Symbol, List
+from kinko.nodes import String, Tuple, Symbol, List, Number
 from kinko.compat import ast as py
 from kinko.checker import split_args
 from kinko.constant import HTML_ELEMENTS, SELF_CLOSING_ELEMENTS
@@ -40,6 +40,15 @@ def _capture(node, name):
                             [], [], None, None))
 
 
+def _returns_output_type(node):
+    # FIXME: temporary hack before we will have working types system
+    if (isinstance(node, Tuple) and
+        (node.values[0].name in {'each', 'if-stmt', 'join'} or
+         node.values[0].name in HTML_ELEMENTS)):
+        return True
+    return False
+
+
 def compile_(node):
     if isinstance(node, Tuple):
         sym, args = node.values[0], node.values[1:]
@@ -55,18 +64,56 @@ def compile_(node):
             yield _write_str('<{}'.format(sym.name))
             for key, value in kw_args.items():
                 yield _write_str(' {}="'.format(key))
-                for item in compile_(value):
-                    yield item
+                if _returns_output_type(value):
+                    for item in compile_(value):
+                        yield item
+                else:
+                    for item in compile_(value):
+                        yield _write(item)
                 yield _write_str('"')
             if sym.name in SELF_CLOSING_ELEMENTS:
                 yield _write_str('/>')
+                assert not pos_args, ('Positional args are not expected in the '
+                                      'self-closing elements')
                 return
             else:
                 yield _write_str('>')
             for arg in pos_args:
-                for item in compile_(arg):
-                    yield item
+                if _returns_output_type(arg):
+                    for item in compile_(arg):
+                        yield item
+                else:
+                    for item in compile_(arg):
+                        yield _write(item)
             yield _write_str('</{}>'.format(sym.name))
+
+        elif sym.name == 'if-stmt':
+            if kw_args:
+                test, = pos_args
+                then_, else_ = kw_args['then'], kw_args.get('else')
+            elif len(pos_args) == 3:
+                test, then_, else_ = pos_args
+            else:
+                (test, then_), else_ = pos_args, None
+
+            test_expr, = list(compile_(test))
+            then_stmt = list(compile_(then_))
+            else_stmt = list(compile_(else_)) if else_ is not None else []
+            yield py.If(test_expr, then_stmt, else_stmt)
+
+        elif sym.name == 'if-expr':
+            if kw_args:
+                test, = pos_args
+                then_, else_ = kw_args['then'], kw_args.get('else')
+            elif len(pos_args) == 3:
+                test, then_, else_ = pos_args
+            else:
+                (test, then_), else_ = pos_args, None
+
+            test_expr, = list(compile_(test))
+            then_expr, = list(compile_(then_))
+            else_expr, = list(compile_(else_)) if else_ is not None else (None,)
+            yield py.IfExp(test_expr, then_expr, else_expr)
 
         elif sym.name == 'each':
             var, col, body = pos_args
@@ -109,10 +156,13 @@ def compile_(node):
             ))
 
     elif isinstance(node, Symbol):
-        yield _write(_ctx_load(node.name))
+        yield _ctx_load(node.name)
 
     elif isinstance(node, String):
-        yield _write_str(node.value)
+        yield py.Str(node.value)
+
+    elif isinstance(node, Number):
+        yield py.Num(node.value)
 
     else:
         raise TypeError('Unable to compile {!r} of type {!r}'
