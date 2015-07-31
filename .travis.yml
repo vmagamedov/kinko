@@ -1,10 +1,5 @@
 language: python
 python:
   - "2.7"
-
-  # - "3.2"  # disabled because of crappy AST differences
-  # - "3.3"  # disabled because of crappy AST differences
-  # May be fixed easily, we just don't need it for now
-
   - "3.4"
 script: nosetests
