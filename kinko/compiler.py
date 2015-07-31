@@ -5,6 +5,7 @@ import astor
 from kinko.nodes import String, Tuple, Symbol, List
 from kinko.compat import ast as py
 from kinko.checker import split_args
+from kinko.constant import HTML_ELEMENTS, SELF_CLOSING_ELEMENTS
 
 
 def _write(value):
@@ -50,18 +51,22 @@ def compile_(node):
                                  py.arguments(placeholders, None, None, []),
                                  list(compile_(body)), [])
 
-        elif sym.name == 'div':
-            yield _write_str('<div')
+        elif sym.name in HTML_ELEMENTS:
+            yield _write_str('<{}'.format(sym.name))
             for key, value in kw_args.items():
                 yield _write_str(' {}="'.format(key))
                 for item in compile_(value):
                     yield item
                 yield _write_str('"')
-            yield _write_str('>')
+            if sym.name in SELF_CLOSING_ELEMENTS:
+                yield _write_str('>')
+                return
+            else:
+                yield _write_str('/>')
             for arg in pos_args:
                 for item in compile_(arg):
                     yield item
-            yield _write_str('</div>')
+            yield _write_str('</{}>'.format(sym.name))
 
         elif sym.name == 'each':
             var, col, body = pos_args
