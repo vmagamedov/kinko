@@ -16,7 +16,9 @@ from .test_parser import ParseMixin
 class TestCompile(ParseMixin, TestCase):
 
     def assertCompiles(self, src, code):
-        first = dumps(compile_module(self.parse(src)))
+        mod = compile_module(self.parse(src))
+        assert compile(mod, '<kinko-template>', 'exec')
+        first = dumps(mod)
         second = dedent(code).strip()
         if first != second:
             msg = ('Compiled code is not equal:\n\n{}'

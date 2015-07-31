@@ -108,8 +108,10 @@ def compile_(node):
                 assert not _returns_output_type(else_) or else_ is None
                 test_expr, = list(compile_(test))
                 then_expr, = list(compile_(then_))
+                # FIXME: implement custom none/null type or require "else"
+                # expression like in Python
                 else_expr, = list(compile_(else_)) if else_ is not None \
-                    else (None,)
+                    else (py.Name('None', py.Load()),)
                 yield py.IfExp(test_expr, then_expr, else_expr)
 
         elif sym.name == 'each':
