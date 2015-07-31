@@ -59,10 +59,10 @@ def compile_(node):
                     yield item
                 yield _write_str('"')
             if sym.name in SELF_CLOSING_ELEMENTS:
-                yield _write_str('>')
+                yield _write_str('/>')
                 return
             else:
-                yield _write_str('/>')
+                yield _write_str('>')
             for arg in pos_args:
                 for item in compile_(arg):
                     yield item
