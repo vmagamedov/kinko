@@ -87,7 +87,7 @@ def compile_(node):
                         yield _write(item)
             yield _write_str('</{}>'.format(sym.name))
 
-        elif sym.name == 'if-stmt':
+        elif sym.name == 'if':
             if kw_args:
                 test, = pos_args
                 then_, else_ = kw_args['then'], kw_args.get('else')
@@ -96,24 +96,21 @@ def compile_(node):
             else:
                 (test, then_), else_ = pos_args, None
 
-            test_expr, = list(compile_(test))
-            then_stmt = list(compile_(then_))
-            else_stmt = list(compile_(else_)) if else_ is not None else []
-            yield py.If(test_expr, then_stmt, else_stmt)
+            if _returns_output_type(then_):
+                assert _returns_output_type(else_) or else_ is None
+                test_expr, = list(compile_(test))
+                then_stmt = list(compile_(then_))
+                else_stmt = list(compile_(else_)) if else_ is not None \
+                    else []
+                yield py.If(test_expr, then_stmt, else_stmt)
 
-        elif sym.name == 'if-expr':
-            if kw_args:
-                test, = pos_args
-                then_, else_ = kw_args['then'], kw_args.get('else')
-            elif len(pos_args) == 3:
-                test, then_, else_ = pos_args
             else:
-                (test, then_), else_ = pos_args, None
-
-            test_expr, = list(compile_(test))
-            then_expr, = list(compile_(then_))
-            else_expr, = list(compile_(else_)) if else_ is not None else (None,)
-            yield py.IfExp(test_expr, then_expr, else_expr)
+                assert not _returns_output_type(else_) or else_ is None
+                test_expr, = list(compile_(test))
+                then_expr, = list(compile_(then_))
+                else_expr, = list(compile_(else_)) if else_ is not None \
+                    else (None,)
+                yield py.IfExp(test_expr, then_expr, else_expr)
 
         elif sym.name == 'each':
             var, col, body = pos_args

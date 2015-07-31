@@ -157,7 +157,7 @@ class TestCompile(ParseMixin, TestCase):
     def testIf(self):
         self.assertCompiles(
             """
-            if-stmt 1
+            if 1
               :then
                 div "Trueish"
               :else
@@ -178,7 +178,7 @@ class TestCompile(ParseMixin, TestCase):
         )
         self.assertCompiles(
             """
-            if-stmt 1
+            if 1
               :then
                 div "Trueish"
             """,
@@ -192,7 +192,7 @@ class TestCompile(ParseMixin, TestCase):
         )
         self.assertCompiles(
             """
-            if-stmt 1
+            if 1
               div "Trueish"
             """,
             """
@@ -205,7 +205,7 @@ class TestCompile(ParseMixin, TestCase):
         )
         self.assertCompiles(
             """
-            div :class (if-expr 1 "true" "false")
+            div :class (if 1 "true" "false")
             """,
             """
             buf.write('<div')
@@ -218,7 +218,7 @@ class TestCompile(ParseMixin, TestCase):
         )
         self.assertCompiles(
             """
-            div :class (if-expr 1 "true")
+            div :class (if 1 "true")
             """,
             """
             buf.write('<div')
