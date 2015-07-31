@@ -123,6 +123,12 @@ def compile_(node):
             for arg in pos_args:
                 for item in compile_(arg):
                     yield item
+
+        elif sym.name == 'get':
+            obj, attr = pos_args
+            obj_expr, = list(compile_(obj))
+            yield py.Attribute(obj_expr, attr.name, py.Load())
+
         else:
             # generic function call
             i = 1

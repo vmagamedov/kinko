@@ -232,6 +232,21 @@ class TestCompile(ParseMixin, TestCase):
             """,
         )
 
+    def testGet(self):
+        self.assertCompiles(
+            """
+            div :class foo.bar.baz
+            """,
+            """
+            buf.write('<div')
+            buf.write(' class="')
+            buf.write(ctx.foo.bar.baz)
+            buf.write('"')
+            buf.write('>')
+            buf.write('</div>')
+            """,
+        )
+
     def testCompile(self):
         mod = compile_module(self.parse("""
         def foo
