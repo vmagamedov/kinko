@@ -7,6 +7,7 @@ except ImportError:
 from funcparserlib.parser import NoParseError
 
 from kinko.nodes import Node, Symbol, Tuple, String, Number, Keyword, Dict, List
+from kinko.nodes import Placeholder
 from kinko.parser import parser
 
 from .test_tokenizer import TokenizeMixin
@@ -60,6 +61,21 @@ class TestParser(ParseMixin, TestCase):
                        Tuple([Symbol('get'),
                               Tuple([Symbol('get'),
                                      Symbol('foo'), Symbol('bar')]),
+                              Symbol('baz')])]),
+            ]),
+        )
+
+    def testPlaceholder(self):
+        self.assertParse(
+            'print #foo #foo.bar #foo.bar.baz',
+            List([
+                Tuple([Symbol('print'),
+                       Placeholder('foo'),
+                       Tuple([Symbol('get'),
+                              Placeholder('foo'), Symbol('bar')]),
+                       Tuple([Symbol('get'),
+                              Tuple([Symbol('get'),
+                                     Placeholder('foo'), Symbol('bar')]),
                               Symbol('baz')])]),
             ]),
         )

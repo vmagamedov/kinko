@@ -16,7 +16,13 @@ from .nodes import Dict, Tuple
 from .tokenizer import Token
 
 
-def node_gen(node_cls, coerce_=None):
+def _tok(type_):
+    def pred(t):
+        return t.type == type_
+    return some(pred).named(u'(a "{}")'.format(type_))
+
+
+def _gen(node_cls, coerce_=None):
     if coerce_ is None:
         def proc(token):
             return node_cls(token.value, location=token.location)
@@ -26,35 +32,31 @@ def node_gen(node_cls, coerce_=None):
     return proc
 
 
-def symbol_gen(token):
-    # TODO: validate symbol name
-    sym = partial(Symbol, location=token.location)
-    parts = token.value.split('.')
-    head, tail = parts[0], parts[1:]
-    return reduce(lambda value, attr: Tuple([sym('get'), value, sym(attr)]),
-                  tail, sym(head))
-
-
-def tok(type_):
-    def pred(t):
-        return t.type == type_
-    return some(pred).named(u'(a "{}")'.format(type_))
+def _dotted(node_cls):
+    def gen(token):
+        # TODO: validate token value
+        sym = partial(Symbol, location=token.location)
+        parts = token.value.split('.')
+        head, tail = parts[0], parts[1:]
+        return reduce(lambda value, attr: Tuple([sym('get'), value, sym(attr)]),
+                      tail, node_cls(head, location=token.location))
+    return gen
 
 
 _as_list = lambda x: x >> (lambda y: [y])
 
 
 def parser():
-    delim = lambda t: skip(tok(t))
+    delim = lambda t: skip(_tok(t))
 
-    symbol = tok(Token.SYMBOL) >> symbol_gen
-    string = tok(Token.STRING) >> node_gen(String)
-    placeholder = tok(Token.PLACEHOLDER) >> node_gen(Placeholder)
-    keyword = tok(Token.KEYWORD) >> node_gen(Keyword)
+    symbol = _tok(Token.SYMBOL) >> _dotted(Symbol)
+    string = _tok(Token.STRING) >> _gen(String)
+    placeholder = _tok(Token.PLACEHOLDER) >> _dotted(Placeholder)
+    keyword = _tok(Token.KEYWORD) >> _gen(Keyword)
 
     # Note: tokenizer guarantee that value consists of dots and digits
     # TODO: convert exceptions
-    number = tok(Token.NUMBER) >> node_gen(Number, literal_eval)
+    number = _tok(Token.NUMBER) >> _gen(Number, literal_eval)
 
     expr = forward_decl()
     implicit_tuple = forward_decl()

@@ -85,11 +85,12 @@ class TestTokenizer(TokenizeMixin, TestCase):
 
     def testPlaceholder(self):
         self.assertTokens(
-            '#foo #foo-bar #foo_bar',
+            '#foo #foo-bar #foo_bar #foo.bar',
             [
                 (Token.PLACEHOLDER, 'foo'),
                 (Token.PLACEHOLDER, 'foo-bar'),
                 (Token.PLACEHOLDER, 'foo_bar'),
+                (Token.PLACEHOLDER, 'foo.bar'),
                 (Token.NEWLINE, '\n'),
                 (Token.EOF, ''),
             ],

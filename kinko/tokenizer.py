@@ -13,7 +13,7 @@ UNDSCR = '_'
 DOT = '.'
 
 KEYWORD_CHARS = ascii_letters + digits + MINUS + UNDSCR
-PLACEHOLDER_CHARS = ascii_letters + digits + MINUS + UNDSCR
+PLACEHOLDER_CHARS = ascii_letters + digits + MINUS + UNDSCR + DOT
 SYMBOL_CHARS = ascii_letters + digits + MINUS + UNDSCR + DOT + SLASH
 NUMBER_CHARS = ascii_letters + digits + DOT
 
