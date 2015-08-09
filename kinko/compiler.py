@@ -120,9 +120,19 @@ def compile_(node):
                          list(compile_(body)), [])
 
         elif sym.name == 'join':
-            for arg in pos_args:
-                for item in compile_(arg):
-                    yield item
+            if len(pos_args) == 1:
+                separator, (collection,) = None, pos_args
+            else:
+                separator, collection = pos_args
+            for i, value in enumerate(collection.values):
+                if i and separator is not None:
+                    yield _write_str(separator.value)
+                if _returns_output_type(value):
+                    for item in compile_(value):
+                        yield item
+                else:
+                    for item in compile_(value):
+                        yield _write(item)
 
         elif sym.name == 'get':
             obj, attr = pos_args

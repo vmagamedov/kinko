@@ -141,7 +141,8 @@ class TestParser(ParseMixin, TestCase):
             List([
                 Tuple([Symbol('foo'),
                        Tuple([Symbol('join'),
-                              String('bar'), Number(5), String('baz')])]),
+                              List([String('bar'), Number(5),
+                                    String('baz')])])]),
             ]),
         )
 
@@ -157,8 +158,8 @@ class TestParser(ParseMixin, TestCase):
             List([
                 Tuple([Symbol('foo'),
                        Tuple([Symbol('join'),
-                              Tuple([Symbol('bar'), Number(1)]),
-                              Tuple([Symbol('baz'), Number(2)])])]),
+                              List([Tuple([Symbol('bar'), Number(1)]),
+                                    Tuple([Symbol('baz'), Number(2)])])])]),
             ]),
         )
 

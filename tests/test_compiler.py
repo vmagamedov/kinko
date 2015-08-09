@@ -79,6 +79,38 @@ class TestCompile(ParseMixin, TestCase):
             buf.write('</div>')
             """,
         )
+        self.assertCompiles(
+            """
+            div :class (join [1 2 3])
+            """,
+            """
+            buf.write('<div')
+            buf.write(' class="')
+            buf.write(1)
+            buf.write(2)
+            buf.write(3)
+            buf.write('"')
+            buf.write('>')
+            buf.write('</div>')
+            """,
+        )
+        self.assertCompiles(
+            """
+            div :class (join " " [1 2 3])
+            """,
+            """
+            buf.write('<div')
+            buf.write(' class="')
+            buf.write(1)
+            buf.write(' ')
+            buf.write(2)
+            buf.write(' ')
+            buf.write(3)
+            buf.write('"')
+            buf.write('>')
+            buf.write('</div>')
+            """,
+        )
 
     def testEach(self):
         self.assertCompiles(

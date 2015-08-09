@@ -82,7 +82,8 @@ def parser():
 
     indented_arg = (
         oneplus(implicit_tuple | expr + delim(Token.NEWLINE))
-        >> (lambda x: x[0] if len(x) == 1 else Tuple([Symbol('join')] + x))
+        >> (lambda x:
+            x[0] if len(x) == 1 else Tuple([Symbol('join'), List(x)]))
     )
 
     indented_kwarg = (
