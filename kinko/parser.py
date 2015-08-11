@@ -43,9 +43,6 @@ def _dotted(node_cls):
     return gen
 
 
-_as_list = lambda x: x >> (lambda y: [y])
-
-
 def parser():
     delim = lambda t: skip(_tok(t))
 
@@ -93,15 +90,15 @@ def parser():
         >> (lambda x: tuple(x))
     )
 
-    indented_kwargs = (
-        oneplus(indented_kwarg)
-        >> (lambda x: list(chain(*x)))
+    indented_args_kwargs = (
+        (many(indented_kwarg) + many(indented_arg))
+        >> (lambda x: list(chain.from_iterable(x[0] + [x[1]])))
     )
 
     implicit_tuple.define(
         (symbol + inline_args + delim(Token.NEWLINE) +
          maybe(delim(Token.INDENT) +
-               (_as_list(indented_arg) | indented_kwargs) +
+               indented_args_kwargs +
                delim(Token.DEDENT)))
         >> (lambda x: Tuple([x[0]] + x[1] + (x[2] or [])))
     )

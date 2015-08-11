@@ -178,3 +178,24 @@ class TestParser(ParseMixin, TestCase):
                        Keyword('k3'), Tuple([Symbol('v3')])]),
             ]),
         )
+
+    def testMixedIndentedArguments(self):
+        self.assertParse(
+            """
+            foo :k1 v1
+              :k2 v2
+              :k3
+                v3
+              v4
+              v5
+            """,
+            List([
+                Tuple([Symbol('foo'),
+                       Keyword('k1'), Symbol('v1'),
+                       Keyword('k2'), Symbol('v2'),
+                       Keyword('k3'), Tuple([Symbol('v3')]),
+                       Tuple([Symbol('join'),
+                              List([Tuple([Symbol('v4')]),
+                                    Tuple([Symbol('v5')])])])]),
+            ]),
+        )
