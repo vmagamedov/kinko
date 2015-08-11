@@ -17,8 +17,12 @@ class TestCompile(ParseMixin, TestCase):
 
     def assertCompiles(self, src, code):
         mod = compile_module(self.parse(src))
-        assert compile(mod, '<kinko-template>', 'exec')
         first = dumps(mod)
+        try:
+            compile(mod, '<kinko-template>', 'exec')
+        except TypeError:
+            print(first)
+            raise
         second = dedent(code).strip()
         if first != second:
             msg = ('Compiled code is not equal:\n\n{}'
@@ -239,27 +243,29 @@ class TestCompile(ParseMixin, TestCase):
         )
         self.assertCompiles(
             """
-            div :class (if 1 "true" "false")
+            div
+              if (if 1 "true" "false")
+                "Trueish"
             """,
             """
             buf.write('<div')
-            buf.write(' class="')
-            buf.write(('true' if 1 else 'false'))
-            buf.write('"')
             buf.write('>')
+            if ('true' if 1 else 'false'):
+                buf.write('Trueish')
             buf.write('</div>')
             """,
         )
         self.assertCompiles(
             """
-            div :class (if 1 "true")
+            div
+              if (if 1 "true")
+                "Trueish"
             """,
             """
             buf.write('<div')
-            buf.write(' class="')
-            buf.write(('true' if 1 else None))
-            buf.write('"')
             buf.write('>')
+            if ('true' if 1 else None):
+                buf.write('Trueish')
             buf.write('</div>')
             """,
         )

@@ -32,7 +32,7 @@ def _capture(node, name):
         py.Attribute(py.Name('buf', py.Load()), 'push', py.Load()),
         [], [], None, None,
     ))
-    for item in compile_(node):
+    for item in compile_(node, True):
         yield item
     yield py.Assign([py.Name(name, py.Store())],
                     py.Call(py.Attribute(py.Name('buf', py.Load()),
@@ -40,36 +40,37 @@ def _capture(node, name):
                             [], [], None, None))
 
 
-def _returns_output_type(node):
+def _yield_writes(node):
     # FIXME: temporary hack before we will have working types system
     if (isinstance(node, Tuple) and
-        (node.values[0].name in {'each', 'if-stmt', 'join'} or
+        (node.values[0].name in {'each', 'if', 'join'} or
          node.values[0].name in HTML_ELEMENTS)):
-        return True
-    return False
+        for item in compile_(node, True):
+            yield item
+    else:
+        for item in compile_(node, True):
+            yield _write(item)
 
 
-def compile_(node):
+def compile_(node, as_statement):
     if isinstance(node, Tuple):
         sym, args = node.values[0], node.values[1:]
         pos_args, kw_args = split_args(args)
         if sym.name == 'def':
+            assert as_statement
             name_sym, body = pos_args
             placeholders = []  # TODO: extract placeholders from body
             yield py.FunctionDef(name_sym.name,
                                  py.arguments(placeholders, None, None, []),
-                                 list(compile_(body)), [])
+                                 list(compile_(body, as_statement)), [])
 
         elif sym.name in HTML_ELEMENTS:
+            assert as_statement
             yield _write_str('<{}'.format(sym.name))
             for key, value in kw_args.items():
                 yield _write_str(' {}="'.format(key))
-                if _returns_output_type(value):
-                    for item in compile_(value):
-                        yield item
-                else:
-                    for item in compile_(value):
-                        yield _write(item)
+                for item in _yield_writes(value):
+                    yield item
                 yield _write_str('"')
             if sym.name in SELF_CLOSING_ELEMENTS:
                 yield _write_str('/>')
@@ -79,12 +80,8 @@ def compile_(node):
             else:
                 yield _write_str('>')
             for arg in pos_args:
-                if _returns_output_type(arg):
-                    for item in compile_(arg):
-                        yield item
-                else:
-                    for item in compile_(arg):
-                        yield _write(item)
+                for item in _yield_writes(arg):
+                    yield item
             yield _write_str('</{}>'.format(sym.name))
 
         elif sym.name == 'if':
@@ -96,30 +93,29 @@ def compile_(node):
             else:
                 (test, then_), else_ = pos_args, None
 
-            if _returns_output_type(then_):
-                assert _returns_output_type(else_) or else_ is None
-                test_expr, = list(compile_(test))
-                then_stmt = list(compile_(then_))
-                else_stmt = list(compile_(else_)) if else_ is not None \
+            test_expr, = list(compile_(test, False))
+
+            if as_statement:
+                then_stmt = list(_yield_writes(then_))
+                else_stmt = list(_yield_writes(else_)) if else_ is not None \
                     else []
                 yield py.If(test_expr, then_stmt, else_stmt)
-
             else:
-                assert not _returns_output_type(else_) or else_ is None
-                test_expr, = list(compile_(test))
-                then_expr, = list(compile_(then_))
+                then_expr, = list(compile_(then_, False))
                 # FIXME: implement custom none/null type or require "else"
                 # expression like in Python
-                else_expr, = list(compile_(else_)) if else_ is not None \
+                else_expr, = list(compile_(else_, False)) if else_ is not None \
                     else (py.Name('None', py.Load()),)
                 yield py.IfExp(test_expr, then_expr, else_expr)
 
         elif sym.name == 'each':
+            assert as_statement
             var, col, body = pos_args
             yield py.For(_ctx_store(var.name), _ctx_load(col.name),
-                         list(compile_(body)), [])
+                         list(compile_(body, as_statement)), [])
 
         elif sym.name == 'join':
+            assert as_statement
             if len(pos_args) == 1:
                 separator, (collection,) = None, pos_args
             else:
@@ -127,16 +123,12 @@ def compile_(node):
             for i, value in enumerate(collection.values):
                 if i and separator is not None:
                     yield _write_str(separator.value)
-                if _returns_output_type(value):
-                    for item in compile_(value):
-                        yield item
-                else:
-                    for item in compile_(value):
-                        yield _write(item)
+                for item in _yield_writes(value):
+                    yield item
 
         elif sym.name == 'get':
             obj, attr = pos_args
-            obj_expr, = list(compile_(obj))
+            obj_expr, = list(compile_(obj, False))
             yield py.Attribute(obj_expr, attr.name, py.Load())
 
         else:
@@ -187,7 +179,7 @@ def compile_(node):
 def compile_module(body):
     assert isinstance(body, List), repr(body)
     mod = py.Module(list(chain.from_iterable(
-        compile_(n) for n in body.values
+        compile_(n, True) for n in body.values
     )))
     py.fix_missing_locations(mod)
     return mod
