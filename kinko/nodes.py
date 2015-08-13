@@ -14,6 +14,11 @@ class Symbol(Node):
 
     def __init__(self, name, **kw):
         self.name = name
+        head, sep, tail = name.partition('/')
+        if sep:
+            self.ns, self.rel = head, tail
+        else:
+            self.ns, self.rel = None, name
         super(Symbol, self).__init__(**kw)
 
     def __repr__(self):

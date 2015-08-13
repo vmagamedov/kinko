@@ -51,8 +51,17 @@ class TestParser(ParseMixin, TestCase):
         return self.assertEqual(self.parse(src), node)
 
     def testSymbol(self):
+        self.assertEqual(Symbol('foo').ns, None)
+        self.assertEqual(Symbol('foo').rel, 'foo')
+        self.assertEqual(Symbol('foo').name, 'foo')
+        self.assertEqual(Symbol('./foo').ns, '.')
+        self.assertEqual(Symbol('./foo').rel, 'foo')
+        self.assertEqual(Symbol('./foo').name, './foo')
+        self.assertEqual(Symbol('foo/bar').ns, 'foo')
+        self.assertEqual(Symbol('foo/bar').rel, 'bar')
+        self.assertEqual(Symbol('foo/bar').name, 'foo/bar')
         self.assertParse(
-            'print foo foo.bar foo.bar.baz',
+            'print foo foo.bar foo.bar.baz foo/bar.baz ./foo.bar',
             List([
                 Tuple([Symbol('print'),
                        Symbol('foo'),
@@ -61,7 +70,11 @@ class TestParser(ParseMixin, TestCase):
                        Tuple([Symbol('get'),
                               Tuple([Symbol('get'),
                                      Symbol('foo'), Symbol('bar')]),
-                              Symbol('baz')])]),
+                              Symbol('baz')]),
+                       Tuple([Symbol('get'),
+                              Symbol('foo/bar'), Symbol('baz')]),
+                       Tuple([Symbol('get'),
+                              Symbol('./foo'), Symbol('bar')])]),
             ]),
         )
 

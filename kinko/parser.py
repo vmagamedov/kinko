@@ -36,10 +36,14 @@ def _dotted(node_cls):
     def gen(token):
         # TODO: validate token value
         sym = partial(Symbol, location=token.location)
-        parts = token.value.split('.')
-        head, tail = parts[0], parts[1:]
+        head, sep, tail = token.value.partition('/')
+        if sep:
+            parts = tail.split('.')
+            path = [head + sep + parts[0]] + parts[1:]
+        else:
+            path = head.split('.')
         return reduce(lambda value, attr: Tuple([sym('get'), value, sym(attr)]),
-                      tail, node_cls(head, location=token.location))
+                      path[1:], node_cls(path[0], location=token.location))
     return gen
 
 

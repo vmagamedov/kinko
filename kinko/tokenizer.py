@@ -224,7 +224,7 @@ def tokenize(string, filename='<string>'):
             continue
         elif ch == '"':
             yield read_string(char_iter, pos, '"')
-        elif ch in ascii_letters:
+        elif ch in ascii_letters or ch == DOT:
             yield read_slice(char_iter, SYMBOL_CHARS, Token.SYMBOL, pos)
         elif ch in digits:
             yield read_slice(char_iter, NUMBER_CHARS, Token.NUMBER, pos)

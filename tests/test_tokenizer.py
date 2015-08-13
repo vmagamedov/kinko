@@ -20,13 +20,14 @@ class TestTokenizer(TokenizeMixin, TestCase):
 
     def testSymbol(self):
         self.assertTokens(
-            'a foo1 foo.bar foo-bar foo/bar foo_bar Foo',
+            'a foo1 foo.bar foo-bar foo/bar ./foo foo_bar Foo',
             [
                 (Token.SYMBOL, 'a'),
                 (Token.SYMBOL, 'foo1'),
                 (Token.SYMBOL, 'foo.bar'),
                 (Token.SYMBOL, 'foo-bar'),
                 (Token.SYMBOL, 'foo/bar'),
+                (Token.SYMBOL, './foo'),
                 (Token.SYMBOL, 'foo_bar'),
                 (Token.SYMBOL, 'Foo'),
                 (Token.NEWLINE, '\n'),
