@@ -108,7 +108,7 @@ def compile_(node, as_statement):
             else:
                 (test, then_), else_ = pos_args, None
 
-            test_expr, = list(compile_(test, False))
+            test_expr = compile_expr(test)
 
             if as_statement:
                 then_stmt = list(_yield_writes(then_))
@@ -116,11 +116,11 @@ def compile_(node, as_statement):
                     else []
                 yield py.If(test_expr, then_stmt, else_stmt)
             else:
-                then_expr, = list(compile_(then_, False))
+                then_expr = compile_expr(then_)
                 # FIXME: implement custom none/null type or require "else"
                 # expression like in Python
-                else_expr, = list(compile_(else_, False)) if else_ is not None \
-                    else (py.Name('None', py.Load()),)
+                else_expr = compile_expr(else_) if else_ is not None \
+                    else py.Name('None', py.Load())
                 yield py.IfExp(test_expr, then_expr, else_expr)
 
         elif sym.name == 'each':
@@ -143,11 +143,11 @@ def compile_(node, as_statement):
 
         elif sym.name == 'get':
             obj, attr = pos_args
-            obj_expr, = list(compile_(obj, False))
+            obj_expr = compile_expr(obj)
             yield py.Attribute(obj_expr, attr.name, py.Load())
 
         else:
-            if sym.ns == '.':
+            if sym.ns:
                 i = 1
 
                 pos_value_vars = []
@@ -169,8 +169,13 @@ def compile_(node, as_statement):
                     kw_value_vars.append(var_name)
                     i += 1
 
+                if sym.ns == '.':
+                    func_name = sym.rel
+                else:
+                    func_name = '.'.join([sym.ns, sym.rel])
+
                 yield py.Expr(py.Call(
-                    py.Name(sym.rel, py.Load()),
+                    py.Name(func_name, py.Load()),
                     [py.Name(var, py.Load()) for var in pos_value_vars],
                     [py.keyword(key, py.Name(value, py.Load()))
                      for key, value in zip(kw_names, kw_value_vars)],
@@ -178,7 +183,13 @@ def compile_(node, as_statement):
                     None,
                 ))
             else:
-                raise NotImplementedError(sym.name)
+                func_name = 'builtins.{}'.format(sym.name)
+                pos_arg_exprs = [compile_expr(a) for a in pos_args]
+                kw_arg_exprs = [py.keyword(k, compile_expr(v))
+                                for k, v in kw_args.items()]
+                yield py.Call(py.Name(func_name, py.Load()),
+                                      pos_arg_exprs, kw_arg_exprs,
+                                      None, None)
 
     elif isinstance(node, Symbol):
         yield _ctx_load(node.name)
@@ -195,6 +206,11 @@ def compile_(node, as_statement):
     else:
         raise TypeError('Unable to compile {!r} of type {!r}'
                         .format(node, type(node)))
+
+
+def compile_expr(node):
+    compiled, = list(compile_(node, False))
+    return compiled
 
 
 def compile_module(body):

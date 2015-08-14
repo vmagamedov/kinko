@@ -135,44 +135,22 @@ class TestCompile(ParseMixin, TestCase):
             """,
         )
 
-    def testFunc(self):
+    def testBuiltinFuncCall(self):
         self.assertCompiles(
             """
-            ./foo
-              each i items
-                div i
+            a :href (url-for "foo" :bar "baz")
             """,
             """
-            buf.push()
-            for ctx.i in ctx.items:
-                buf.write('<div')
-                buf.write('>')
-                buf.write(ctx.i)
-                buf.write('</div>')
-            __anon1 = buf.pop()
-            foo(__anon1)
-            """,
-        )
-        self.assertCompiles(
-            """
-            ./foo
-              :param
-                each i items
-                  div i
-            """,
-            """
-            buf.push()
-            for ctx.i in ctx.items:
-                buf.write('<div')
-                buf.write('>')
-                buf.write(ctx.i)
-                buf.write('</div>')
-            __anon1 = buf.pop()
-            foo(param=__anon1)
+            buf.write('<a')
+            buf.write(' href="')
+            buf.write(builtins.url-for('foo', bar='baz'))
+            buf.write('"')
+            buf.write('>')
+            buf.write('</a>')
             """,
         )
 
-    def testDef(self):
+    def testFuncDef(self):
         self.assertCompiles(
             """
             def foo
@@ -193,6 +171,39 @@ class TestCompile(ParseMixin, TestCase):
                     buf.write('>')
                     buf.write(baz)
                     buf.write('</div>')
+            """,
+        )
+
+    def testFuncCall(self):
+        self.assertCompiles(
+            """
+            def foo
+              span #param
+
+            def bar
+              div
+                ./foo
+                  :param
+                    div "Test"
+            """,
+            """
+            def foo(param):
+                buf.write('<span')
+                buf.write('>')
+                buf.write(param)
+                buf.write('</span>')
+
+            def bar():
+                buf.write('<div')
+                buf.write('>')
+                buf.push()
+                buf.write('<div')
+                buf.write('>')
+                buf.write('Test')
+                buf.write('</div>')
+                __anon1 = buf.pop()
+                foo(param=__anon1)
+                buf.write('</div>')
             """,
         )
 
