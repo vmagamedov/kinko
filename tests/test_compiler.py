@@ -138,7 +138,7 @@ class TestCompile(ParseMixin, TestCase):
     def testFunc(self):
         self.assertCompiles(
             """
-            foo
+            ./foo
               each i items
                 div i
             """,
@@ -155,7 +155,7 @@ class TestCompile(ParseMixin, TestCase):
         )
         self.assertCompiles(
             """
-            foo
+            ./foo
               :param
                 each i items
                   div i
@@ -177,17 +177,21 @@ class TestCompile(ParseMixin, TestCase):
             """
             def foo
               div
+                #bar
               each i items
                 div
+                  #baz
             """,
             """
-            def foo():
+            def foo(bar, baz):
                 buf.write('<div')
                 buf.write('>')
+                buf.write(bar)
                 buf.write('</div>')
                 for ctx.i in ctx.items:
                     buf.write('<div')
                     buf.write('>')
+                    buf.write(baz)
                     buf.write('</div>')
             """,
         )

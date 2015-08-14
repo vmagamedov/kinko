@@ -9,6 +9,9 @@ class Node(object):
         node.__type__ = _type_
         return node
 
+    def accept(self, visitor):
+        raise NotImplementedError
+
 
 class Symbol(Node):
 
@@ -24,6 +27,9 @@ class Symbol(Node):
     def __repr__(self):
         return self.name
 
+    def accept(self, visitor):
+        return visitor.visit_symbol(self)
+
 
 class String(Node):
 
@@ -33,6 +39,9 @@ class String(Node):
 
     def __repr__(self):
         return '"{}"'.format(self.value.replace('"', '\\"'))
+
+    def accept(self, visitor):
+        return visitor.visit_string(self)
 
 
 class Number(Node):
@@ -44,6 +53,9 @@ class Number(Node):
     def __repr__(self):
         return repr(self.value)
 
+    def accept(self, visitor):
+        return visitor.visit_number(self)
+
 
 class Keyword(Node):
 
@@ -53,6 +65,9 @@ class Keyword(Node):
 
     def __repr__(self):
         return ':{}'.format(self.name)
+
+    def accept(self, visitor):
+        return visitor.visit_keyword(self)
 
 
 class Placeholder(Node):
@@ -64,6 +79,9 @@ class Placeholder(Node):
     def __repr__(self):
         return '#{}'.format(self.name)
 
+    def accept(self, visitor):
+        return visitor.visit_placeholder(self)
+
 
 class Tuple(Node):
 
@@ -73,6 +91,9 @@ class Tuple(Node):
 
     def __repr__(self):
         return '({})'.format(' '.join(map(repr, self.values)))
+
+    def accept(self, visitor):
+        return visitor.visit_tuple(self)
 
 
 class List(Node):
@@ -84,6 +105,9 @@ class List(Node):
     def __repr__(self):
         return '[{}]'.format(' '.join(map(repr, self.values)))
 
+    def accept(self, visitor):
+        return visitor.visit_list(self)
+
 
 class Dict(Node):
 
@@ -93,3 +117,39 @@ class Dict(Node):
 
     def __repr__(self):
         return '{{{}}}'.format(' '.join(map(repr, self.values)))
+
+    def accept(self, visitor):
+        return visitor.visit_dict(self)
+
+
+class NodeVisitor(object):
+
+    def visit(self, node):
+        node.accept(self)
+
+    def visit_tuple(self, node):
+        for value in node.values:
+            self.visit(value)
+
+    def visit_list(self, node):
+        for value in node.values:
+            self.visit(value)
+
+    def visit_dict(self, node):
+        for value in node.values:
+            self.visit(value)
+
+    def visit_symbol(self, node):
+        pass
+
+    def visit_keyword(self, node):
+        pass
+
+    def visit_placeholder(self, node):
+        pass
+
+    def visit_number(self, node):
+        pass
+
+    def visit_string(self, node):
+        pass

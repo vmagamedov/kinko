@@ -31,6 +31,10 @@ class _AST(object):
         def FunctionDef(name, args, body, decorator_list):
             return _ast.FunctionDef(name, args, body, decorator_list, None)
 
+        @staticmethod
+        def arg(arg):
+            return _ast.arg(arg, None)
+
     else:
         @staticmethod
         def arguments(args, vararg, kwarg, defaults):
@@ -39,6 +43,10 @@ class _AST(object):
         @staticmethod
         def FunctionDef(name, args, body, decorator_list):
             return _ast.FunctionDef(name, args, body, decorator_list)
+
+        @staticmethod
+        def arg(arg):
+            return _ast.Name(arg, _ast.Param())
 
 
 ast = _AST()
