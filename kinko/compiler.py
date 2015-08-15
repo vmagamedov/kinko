@@ -1,3 +1,4 @@
+from ast import NodeVisitor as PyNodeVisitor
 from itertools import chain
 
 import astor
@@ -69,6 +70,48 @@ class _PlaceholdersExtractor(NodeVisitor):
     def visit_placeholder(self, node):
         if node.name not in self.placeholders:
             self.placeholders.append(node.name)
+
+
+class _Optimizer(PyNodeVisitor):
+
+    def _paste(self, body):
+        chunks = []
+        for item in body:
+            self.visit(item)
+            if (
+                isinstance(item, py.Expr) and
+                isinstance(item.value, py.Call) and
+                isinstance(item.value.func, py.Attribute) and
+                isinstance(item.value.func.value, py.Name) and
+                item.value.func.value.id == 'buf' and
+                item.value.func.attr == 'write' and
+                len(item.value.args) == 1 and
+                isinstance(item.value.args[0], (py.Str, py.Num))
+            ):
+                if isinstance(item.value.args[0], py.Str):
+                    chunks.append(item.value.args[0].s)
+                else:
+                    chunks.append(str(item.value.args[0].n))
+            else:
+                if chunks:
+                    yield _write_str(''.join(chunks))
+                    del chunks[:]
+                yield item
+        if chunks:
+            yield _write_str(''.join(chunks))
+
+    def visit_Module(self, node):
+        node.body = list(self._paste(node.body))
+
+    def visit_FunctionDef(self, node):
+        node.body = list(self._paste(node.body))
+
+    def visit_If(self, node):
+        node.body = list(self._paste(node.body))
+        node.orelse = list(self._paste(node.orelse))
+
+    def visit_For(self, node):
+        node.body = list(self._paste(node.body))
 
 
 def compile_(node, as_statement):
@@ -219,6 +262,7 @@ def compile_module(body):
     mod = py.Module(list(chain.from_iterable(
         compile_(n, True) for n in body.values
     )))
+    _Optimizer().visit(mod)
     py.fix_missing_locations(mod)
     return mod
 

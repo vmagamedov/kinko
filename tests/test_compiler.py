@@ -36,13 +36,7 @@ class TestCompile(ParseMixin, TestCase):
             div :foo "bar" "baz"
             """,
             """
-            buf.write('<div')
-            buf.write(' foo="')
-            buf.write('bar')
-            buf.write('"')
-            buf.write('>')
-            buf.write('baz')
-            buf.write('</div>')
+            buf.write('<div foo="bar">baz</div>')
             """,
         )
 
@@ -52,11 +46,7 @@ class TestCompile(ParseMixin, TestCase):
             div :foo "bar" baz
             """,
             """
-            buf.write('<div')
-            buf.write(' foo="')
-            buf.write('bar')
-            buf.write('"')
-            buf.write('>')
+            buf.write('<div foo="bar">')
             buf.write(ctx.baz)
             buf.write('</div>')
             """,
@@ -70,17 +60,7 @@ class TestCompile(ParseMixin, TestCase):
               div "two"
             """,
             """
-            buf.write('<div')
-            buf.write('>')
-            buf.write('<div')
-            buf.write('>')
-            buf.write('one')
-            buf.write('</div>')
-            buf.write('<div')
-            buf.write('>')
-            buf.write('two')
-            buf.write('</div>')
-            buf.write('</div>')
+            buf.write('<div><div>one</div><div>two</div></div>')
             """,
         )
         self.assertCompiles(
@@ -88,14 +68,7 @@ class TestCompile(ParseMixin, TestCase):
             div :class (join [1 2 3])
             """,
             """
-            buf.write('<div')
-            buf.write(' class="')
-            buf.write(1)
-            buf.write(2)
-            buf.write(3)
-            buf.write('"')
-            buf.write('>')
-            buf.write('</div>')
+            buf.write('<div class="123"></div>')
             """,
         )
         self.assertCompiles(
@@ -103,16 +76,7 @@ class TestCompile(ParseMixin, TestCase):
             div :class (join " " [1 2 3])
             """,
             """
-            buf.write('<div')
-            buf.write(' class="')
-            buf.write(1)
-            buf.write(' ')
-            buf.write(2)
-            buf.write(' ')
-            buf.write(3)
-            buf.write('"')
-            buf.write('>')
-            buf.write('</div>')
+            buf.write('<div class="1 2 3"></div>')
             """,
         )
 
@@ -124,11 +88,9 @@ class TestCompile(ParseMixin, TestCase):
                 div i
             """,
             """
-            buf.write('<div')
-            buf.write('>')
+            buf.write('<div>')
             for ctx.i in ctx.items:
-                buf.write('<div')
-                buf.write('>')
+                buf.write('<div>')
                 buf.write(ctx.i)
                 buf.write('</div>')
             buf.write('</div>')
@@ -141,12 +103,9 @@ class TestCompile(ParseMixin, TestCase):
             a :href (url-for "foo" :bar "baz")
             """,
             """
-            buf.write('<a')
-            buf.write(' href="')
+            buf.write('<a href="')
             buf.write(builtins.url-for('foo', bar='baz'))
-            buf.write('"')
-            buf.write('>')
-            buf.write('</a>')
+            buf.write('"></a>')
             """,
         )
 
@@ -162,13 +121,11 @@ class TestCompile(ParseMixin, TestCase):
             """,
             """
             def foo(bar, baz):
-                buf.write('<div')
-                buf.write('>')
+                buf.write('<div>')
                 buf.write(bar)
                 buf.write('</div>')
                 for ctx.i in ctx.items:
-                    buf.write('<div')
-                    buf.write('>')
+                    buf.write('<div>')
                     buf.write(baz)
                     buf.write('</div>')
             """,
@@ -186,16 +143,11 @@ class TestCompile(ParseMixin, TestCase):
                         span "Test"
             """,
             """
-            buf.write('<div')
-            buf.write('>')
+            buf.write('<div>')
             buf.push()
-            buf.write('<div')
-            buf.write('>')
+            buf.write('<div>')
             buf.push()
-            buf.write('<span')
-            buf.write('>')
-            buf.write('Test')
-            buf.write('</span>')
+            buf.write('<span>Test</span>')
             baz(3, 4, param2=buf.pop())
             buf.write('</div>')
             foo.bar(1, 2, param1=buf.pop())
@@ -214,15 +166,9 @@ class TestCompile(ParseMixin, TestCase):
             """,
             """
             if 1:
-                buf.write('<div')
-                buf.write('>')
-                buf.write('Trueish')
-                buf.write('</div>')
+                buf.write('<div>Trueish</div>')
             else:
-                buf.write('<div')
-                buf.write('>')
-                buf.write('Falseish')
-                buf.write('</div>')
+                buf.write('<div>Falseish</div>')
             """,
         )
         self.assertCompiles(
@@ -233,10 +179,7 @@ class TestCompile(ParseMixin, TestCase):
             """,
             """
             if 1:
-                buf.write('<div')
-                buf.write('>')
-                buf.write('Trueish')
-                buf.write('</div>')
+                buf.write('<div>Trueish</div>')
             """,
         )
         self.assertCompiles(
@@ -246,10 +189,7 @@ class TestCompile(ParseMixin, TestCase):
             """,
             """
             if 1:
-                buf.write('<div')
-                buf.write('>')
-                buf.write('Trueish')
-                buf.write('</div>')
+                buf.write('<div>Trueish</div>')
             """,
         )
         self.assertCompiles(
@@ -259,8 +199,7 @@ class TestCompile(ParseMixin, TestCase):
                 "Trueish"
             """,
             """
-            buf.write('<div')
-            buf.write('>')
+            buf.write('<div>')
             if ('true' if 1 else 'false'):
                 buf.write('Trueish')
             buf.write('</div>')
@@ -273,8 +212,7 @@ class TestCompile(ParseMixin, TestCase):
                 "Trueish"
             """,
             """
-            buf.write('<div')
-            buf.write('>')
+            buf.write('<div>')
             if ('true' if 1 else None):
                 buf.write('Trueish')
             buf.write('</div>')
@@ -287,12 +225,9 @@ class TestCompile(ParseMixin, TestCase):
             div :class foo.bar.baz
             """,
             """
-            buf.write('<div')
-            buf.write(' class="')
+            buf.write('<div class="')
             buf.write(ctx.foo.bar.baz)
-            buf.write('"')
-            buf.write('>')
-            buf.write('</div>')
+            buf.write('"></div>')
             """,
         )
 
@@ -318,9 +253,9 @@ class TestCompile(ParseMixin, TestCase):
 
         ns['foo']()
         self.assertEqual(output, [
-            '<div', '>',
-            '<div', '>', 1, '</div>',
-            '<div', '>', 2, '</div>',
-            '<div', '>', 3, '</div>',
+            '<div>',
+            '<div>', 1, '</div>',
+            '<div>', 2, '</div>',
+            '<div>', 3, '</div>',
             '</div>',
         ])
