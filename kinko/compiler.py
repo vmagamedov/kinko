@@ -28,25 +28,31 @@ def _ctx_store(name):
     return py.Attribute(py.Name('ctx', py.Load()), name, py.Store())
 
 
-def _capture(node, name):
-    yield py.Expr(py.Call(
+def _buf_push():
+    return py.Expr(py.Call(
         py.Attribute(py.Name('buf', py.Load()), 'push', py.Load()),
         [], [], None, None,
     ))
-    for item in _yield_writes(node):
-        yield item
-    yield py.Assign([py.Name(name, py.Store())],
-                    py.Call(py.Attribute(py.Name('buf', py.Load()),
-                                         'pop', py.Load()),
-                            [], [], None, None))
+
+
+def _buf_pop():
+    return py.Call(py.Attribute(py.Name('buf', py.Load()),
+                                'pop', py.Load()),
+                   [], [], None, None)
+
+
+def _returns_output_type(node):
+    # FIXME: temporary hack before we will have working types system
+    return (
+        isinstance(node, Tuple) and
+        (node.values[0].name in {'each', 'if', 'join'} or
+         node.values[0].name in HTML_ELEMENTS or
+         node.values[0].ns)
+    )
 
 
 def _yield_writes(node):
-    # FIXME: temporary hack before we will have working types system
-    if (isinstance(node, Tuple) and
-        (node.values[0].name in {'each', 'if', 'join'} or
-         node.values[0].name in HTML_ELEMENTS or
-         node.values[0].ns)):
+    if _returns_output_type(node):
         for item in compile_(node, True):
             yield item
     else:
@@ -148,48 +154,43 @@ def compile_(node, as_statement):
 
         else:
             if sym.ns:
-                i = 1
-
-                pos_value_vars = []
-                for value in pos_args:
-                    var_name = '__anon{}'.format(i)
-                    for item in _capture(value, var_name):
-                        yield item
-                    pos_value_vars.append(var_name)
-                    i += 1
-
-                kw_names, kw_values = \
-                    zip(*kw_args.items()) if kw_args else ([], [])
-                kw_value_vars = []
-
-                for value in kw_values:
-                    var_name = '__anon{}'.format(i)
-                    for item in _capture(value, var_name):
-                        yield item
-                    kw_value_vars.append(var_name)
-                    i += 1
-
                 if sym.ns == '.':
-                    func_name = sym.rel
+                    name_expr = py.Name(sym.rel, py.Load())
                 else:
-                    func_name = '.'.join([sym.ns, sym.rel])
-
-                yield py.Expr(py.Call(
-                    py.Name(func_name, py.Load()),
-                    [py.Name(var, py.Load()) for var in pos_value_vars],
-                    [py.keyword(key, py.Name(value, py.Load()))
-                     for key, value in zip(kw_names, kw_value_vars)],
-                    None,
-                    None,
-                ))
+                    name_expr = py.Name('.'.join([sym.ns, sym.rel]), py.Load())
             else:
-                func_name = 'builtins.{}'.format(sym.name)
-                pos_arg_exprs = [compile_expr(a) for a in pos_args]
-                kw_arg_exprs = [py.keyword(k, compile_expr(v))
-                                for k, v in kw_args.items()]
-                yield py.Call(py.Name(func_name, py.Load()),
-                                      pos_arg_exprs, kw_arg_exprs,
-                                      None, None)
+                name_expr = py.Attribute(py.Name('builtins', py.Load()),
+                                         sym.name, py.Load())
+
+            kw_arg_exprs = []
+            for key, value in kw_args.items():
+                if _returns_output_type(value):
+                    yield _buf_push()
+                    for item in _yield_writes(value):
+                        yield item
+                    kw_arg_exprs.append(py.keyword(key, _buf_pop()))
+                else:
+                    kw_arg_exprs.append(py.keyword(key, compile_expr(value)))
+
+            pos_arg_exprs = []
+            # capturing args in reversed order to preserve proper ordering
+            # during second reverse
+            for value in reversed(pos_args):
+                if _returns_output_type(value):
+                    yield _buf_push()
+                    for item in _yield_writes(value):
+                        yield item
+                    pos_arg_exprs.append(_buf_pop())
+                else:
+                    pos_arg_exprs.append(compile_expr(value))
+
+            # applying args in reversed order to preserve pushes/pops
+            # consistency
+            py_call = py.Call(name_expr,
+                              pos_arg_exprs[::-1],
+                              kw_arg_exprs[::-1],
+                              None, None)
+            yield (py.Expr(py_call) if sym.ns else py_call)
 
     elif isinstance(node, Symbol):
         yield _ctx_load(node.name)

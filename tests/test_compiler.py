@@ -177,33 +177,29 @@ class TestCompile(ParseMixin, TestCase):
     def testFuncCall(self):
         self.assertCompiles(
             """
-            def foo
-              span #param
-
-            def bar
-              div
-                ./foo
-                  :param
-                    div "Test"
+            div
+              foo/bar 1 2
+                :param1
+                  div
+                    ./baz 3 4
+                      :param2
+                        span "Test"
             """,
             """
-            def foo(param):
-                buf.write('<span')
-                buf.write('>')
-                buf.write(param)
-                buf.write('</span>')
-
-            def bar():
-                buf.write('<div')
-                buf.write('>')
-                buf.push()
-                buf.write('<div')
-                buf.write('>')
-                buf.write('Test')
-                buf.write('</div>')
-                __anon1 = buf.pop()
-                foo(param=__anon1)
-                buf.write('</div>')
+            buf.write('<div')
+            buf.write('>')
+            buf.push()
+            buf.write('<div')
+            buf.write('>')
+            buf.push()
+            buf.write('<span')
+            buf.write('>')
+            buf.write('Test')
+            buf.write('</span>')
+            baz(3, 4, param2=buf.pop())
+            buf.write('</div>')
+            foo.bar(1, 2, param1=buf.pop())
+            buf.write('</div>')
             """,
         )
 
