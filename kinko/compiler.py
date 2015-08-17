@@ -1,4 +1,4 @@
-from ast import NodeVisitor as PyNodeVisitor
+from ast import NodeTransformer, iter_fields, copy_location
 from itertools import chain
 
 import astor
@@ -75,12 +75,22 @@ class _PlaceholdersExtractor(NodeVisitor):
 _cls_eq = lambda i, name: i.__class__.__name__ == name
 
 
-class _Optimizer(PyNodeVisitor):
+def _node_copy(func):
+    def wrapper(self, node):
+        node = self.generic_visit(node)
+        node_cls = type(node)
+        new_node = node_cls(*[value for _, value in iter_fields(node)])
+        copy_location(new_node, node)
+        func(self, new_node)
+        return new_node
+    return wrapper
+
+
+class _Optimizer(NodeTransformer):
 
     def _paste(self, body):
         chunks = []
         for item in body:
-            self.visit(item)
             if (
                 _cls_eq(item, 'Expr') and
                 _cls_eq(item.value, 'Call') and
@@ -104,16 +114,20 @@ class _Optimizer(PyNodeVisitor):
         if chunks:
             yield _write_str(u''.join(chunks))
 
+    @_node_copy
     def visit_Module(self, node):
         node.body = list(self._paste(node.body))
 
+    @_node_copy
     def visit_FunctionDef(self, node):
         node.body = list(self._paste(node.body))
 
+    @_node_copy
     def visit_If(self, node):
         node.body = list(self._paste(node.body))
         node.orelse = list(self._paste(node.orelse))
 
+    @_node_copy
     def visit_For(self, node):
         node.body = list(self._paste(node.body))
 
@@ -266,7 +280,7 @@ def compile_module(body):
     mod = py.Module(list(chain.from_iterable(
         compile_(n, True) for n in body.values
     )))
-    _Optimizer().visit(mod)
+    mod = _Optimizer().visit(mod)
     py.fix_missing_locations(mod)
     return mod
 
