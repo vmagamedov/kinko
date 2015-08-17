@@ -3,11 +3,11 @@ from itertools import chain
 
 import astor
 
-from kinko.nodes import String, Tuple, Symbol, List, Number, Placeholder
-from kinko.nodes import NodeVisitor
-from kinko.compat import ast as py
-from kinko.checker import split_args
-from kinko.constant import HTML_ELEMENTS, SELF_CLOSING_ELEMENTS
+from .nodes import String, Tuple, Symbol, List, Number, Placeholder
+from .nodes import NodeVisitor
+from .compat import ast as py, texttype
+from .checker import split_args
+from .constant import HTML_ELEMENTS, SELF_CLOSING_ELEMENTS
 
 
 def _write(value):
@@ -72,6 +72,9 @@ class _PlaceholdersExtractor(NodeVisitor):
             self.placeholders.append(node.name)
 
 
+_cls_eq = lambda i, name: i.__class__.__name__ == name
+
+
 class _Optimizer(PyNodeVisitor):
 
     def _paste(self, body):
@@ -79,26 +82,27 @@ class _Optimizer(PyNodeVisitor):
         for item in body:
             self.visit(item)
             if (
-                isinstance(item, py.Expr) and
-                isinstance(item.value, py.Call) and
-                isinstance(item.value.func, py.Attribute) and
-                isinstance(item.value.func.value, py.Name) and
+                _cls_eq(item, 'Expr') and
+                _cls_eq(item.value, 'Call') and
+                _cls_eq(item.value.func, 'Attribute') and
+                _cls_eq(item.value.func.value, 'Name') and
                 item.value.func.value.id == 'buf' and
                 item.value.func.attr == 'write' and
                 len(item.value.args) == 1 and
-                isinstance(item.value.args[0], (py.Str, py.Num))
+                (_cls_eq(item.value.args[0], 'Str') or
+                 _cls_eq(item.value.args[0], 'Num'))
             ):
-                if isinstance(item.value.args[0], py.Str):
+                if _cls_eq(item.value.args[0], 'Str'):
                     chunks.append(item.value.args[0].s)
                 else:
-                    chunks.append(str(item.value.args[0].n))
+                    chunks.append(texttype(item.value.args[0].n))
             else:
                 if chunks:
-                    yield _write_str(''.join(chunks))
+                    yield _write_str(u''.join(chunks))
                     del chunks[:]
                 yield item
         if chunks:
-            yield _write_str(''.join(chunks))
+            yield _write_str(u''.join(chunks))
 
     def visit_Module(self, node):
         node.body = list(self._paste(node.body))
@@ -130,23 +134,23 @@ def compile_(node, as_statement):
 
         elif sym.name in HTML_ELEMENTS:
             assert as_statement
-            yield _write_str('<{}'.format(sym.name))
+            yield _write_str(u'<{}'.format(sym.name))
             for key, value in kw_args.items():
-                yield _write_str(' {}="'.format(key))
+                yield _write_str(u' {}="'.format(key))
                 for item in _yield_writes(value):
                     yield item
-                yield _write_str('"')
+                yield _write_str(u'"')
             if sym.name in SELF_CLOSING_ELEMENTS:
-                yield _write_str('/>')
+                yield _write_str(u'/>')
                 assert not pos_args, ('Positional args are not expected in the '
                                       'self-closing elements')
                 return
             else:
-                yield _write_str('>')
+                yield _write_str(u'>')
             for arg in pos_args:
                 for item in _yield_writes(arg):
                     yield item
-            yield _write_str('</{}>'.format(sym.name))
+            yield _write_str(u'</{}>'.format(sym.name))
 
         elif sym.name == 'if':
             if kw_args:

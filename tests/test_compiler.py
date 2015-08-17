@@ -1,3 +1,4 @@
+# encoding: utf-8
 import difflib
 from textwrap import dedent
 from unittest import TestCase
@@ -7,7 +8,8 @@ try:
 except ImportError:
     from mock import Mock
 
-from kinko.compat import _exec_in
+from kinko.utils import Buffer
+from kinko.compat import _exec_in, PY3
 from kinko.compiler import compile_module, dumps
 
 from .test_parser import ParseMixin
@@ -18,6 +20,8 @@ class TestCompile(ParseMixin, TestCase):
     def assertCompiles(self, src, code):
         mod = compile_module(self.parse(src))
         first = dumps(mod)
+        if not PY3:
+            first = first.replace("u'", "'")
         try:
             compile(mod, '<kinko-template>', 'exec')
         except TypeError:
@@ -32,20 +36,20 @@ class TestCompile(ParseMixin, TestCase):
 
     def testTag(self):
         self.assertCompiles(
-            """
+            u"""
             div :foo "bar" "baz"
             """,
-            """
+            u"""
             buf.write('<div foo="bar">baz</div>')
             """,
         )
 
     def testSymbol(self):
         self.assertCompiles(
-            """
+            u"""
             div :foo "bar" baz
             """,
-            """
+            u"""
             buf.write('<div foo="bar">')
             buf.write(ctx.baz)
             buf.write('</div>')
@@ -54,40 +58,40 @@ class TestCompile(ParseMixin, TestCase):
 
     def testJoin(self):
         self.assertCompiles(
-            """
+            u"""
             div
               div "one"
               div "two"
             """,
-            """
+            u"""
             buf.write('<div><div>one</div><div>two</div></div>')
             """,
         )
         self.assertCompiles(
-            """
+            u"""
             div :class (join [1 2 3])
             """,
-            """
+            u"""
             buf.write('<div class="123"></div>')
             """,
         )
         self.assertCompiles(
-            """
+            u"""
             div :class (join " " [1 2 3])
             """,
-            """
+            u"""
             buf.write('<div class="1 2 3"></div>')
             """,
         )
 
     def testEach(self):
         self.assertCompiles(
-            """
+            u"""
             div
               each i items
                 div i
             """,
-            """
+            u"""
             buf.write('<div>')
             for ctx.i in ctx.items:
                 buf.write('<div>')
@@ -99,10 +103,10 @@ class TestCompile(ParseMixin, TestCase):
 
     def testBuiltinFuncCall(self):
         self.assertCompiles(
-            """
+            u"""
             a :href (url-for "foo" :bar "baz")
             """,
-            """
+            u"""
             buf.write('<a href="')
             buf.write(builtins.url-for('foo', bar='baz'))
             buf.write('"></a>')
@@ -111,7 +115,7 @@ class TestCompile(ParseMixin, TestCase):
 
     def testFuncDef(self):
         self.assertCompiles(
-            """
+            u"""
             def foo
               div
                 #bar
@@ -119,7 +123,7 @@ class TestCompile(ParseMixin, TestCase):
                 div
                   #baz
             """,
-            """
+            u"""
             def foo(bar, baz):
                 buf.write('<div>')
                 buf.write(bar)
@@ -133,7 +137,7 @@ class TestCompile(ParseMixin, TestCase):
 
     def testFuncCall(self):
         self.assertCompiles(
-            """
+            u"""
             div
               foo/bar 1 2
                 :param1
@@ -142,7 +146,7 @@ class TestCompile(ParseMixin, TestCase):
                       :param2
                         span "Test"
             """,
-            """
+            u"""
             buf.write('<div>')
             buf.push()
             buf.write('<div>')
@@ -157,14 +161,14 @@ class TestCompile(ParseMixin, TestCase):
 
     def testIf(self):
         self.assertCompiles(
-            """
+            u"""
             if 1
               :then
                 div "Trueish"
               :else
                 div "Falseish"
             """,
-            """
+            u"""
             if 1:
                 buf.write('<div>Trueish</div>')
             else:
@@ -172,33 +176,33 @@ class TestCompile(ParseMixin, TestCase):
             """,
         )
         self.assertCompiles(
-            """
+            u"""
             if 1
               :then
                 div "Trueish"
             """,
-            """
+            u"""
             if 1:
                 buf.write('<div>Trueish</div>')
             """,
         )
         self.assertCompiles(
-            """
+            u"""
             if 1
               div "Trueish"
             """,
-            """
+            u"""
             if 1:
                 buf.write('<div>Trueish</div>')
             """,
         )
         self.assertCompiles(
-            """
+            u"""
             div
               if (if 1 "true" "false")
                 "Trueish"
             """,
-            """
+            u"""
             buf.write('<div>')
             if ('true' if 1 else 'false'):
                 buf.write('Trueish')
@@ -206,12 +210,12 @@ class TestCompile(ParseMixin, TestCase):
             """,
         )
         self.assertCompiles(
-            """
+            u"""
             div
               if (if 1 "true")
                 "Trueish"
             """,
-            """
+            u"""
             buf.write('<div>')
             if ('true' if 1 else None):
                 buf.write('Trueish')
@@ -221,10 +225,10 @@ class TestCompile(ParseMixin, TestCase):
 
     def testGet(self):
         self.assertCompiles(
-            """
+            u"""
             div :class foo.bar.baz
             """,
-            """
+            u"""
             buf.write('<div class="')
             buf.write(ctx.foo.bar.baz)
             buf.write('"></div>')
@@ -232,7 +236,7 @@ class TestCompile(ParseMixin, TestCase):
         )
 
     def testCompile(self):
-        mod = compile_module(self.parse("""
+        mod = compile_module(self.parse(u"""
         def foo
           div
             each i items
@@ -240,22 +244,17 @@ class TestCompile(ParseMixin, TestCase):
         """))
         mod_code = compile(mod, '<kinko-template>', 'exec')
 
-        output = []
-
-        buf = Mock()
-        buf.write = lambda s: output.append(s)
-
         ctx = Mock()
-        ctx.items = [1, 2, 3]
+        ctx.items = [1, 2, u"Привет"]
 
+        buf = Buffer()
+        buf.push()
         ns = {'buf': buf, 'ctx': ctx}
         _exec_in(mod_code, ns)
-
         ns['foo']()
-        self.assertEqual(output, [
-            '<div>',
-            '<div>', 1, '</div>',
-            '<div>', 2, '</div>',
-            '<div>', 3, '</div>',
-            '</div>',
-        ])
+        content = buf.pop()
+
+        self.assertEqual(
+            content,
+            u"<div><div>1</div><div>2</div><div>Привет</div></div>",
+        )

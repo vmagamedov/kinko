@@ -42,11 +42,23 @@ class _AST(object):
 
         @staticmethod
         def FunctionDef(name, args, body, decorator_list):
-            return _ast.FunctionDef(name, args, body, decorator_list)
+            return _ast.FunctionDef(str(name), args, body, decorator_list)
 
         @staticmethod
         def arg(arg):
-            return _ast.Name(arg, _ast.Param())
+            return _ast.Name(str(arg), _ast.Param())
+
+        @staticmethod
+        def Name(id, ctx):
+            return _ast.Name(str(id), ctx)
+
+        @staticmethod
+        def Attribute(value, attr, ctx):
+            return _ast.Attribute(value, str(attr), ctx)
+
+        @staticmethod
+        def keyword(arg, value):
+            return _ast.keyword(str(arg), value)
 
 
 ast = _AST()
@@ -58,6 +70,10 @@ if PY3:
     def _exec_in(source, globals_dict):
         getattr(builtins, 'exec')(source, globals_dict)
 
+    texttype = str
+
 else:
     def _exec_in(source, globals_dict):
         exec('exec source in globals_dict')
+
+    texttype = unicode
