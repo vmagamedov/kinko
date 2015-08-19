@@ -81,13 +81,12 @@ class Position(_Position):
         return self.offset
 
 
-Location = namedtuple('Location', 'filename start end')
+Location = namedtuple('Location', 'start end')
 
 
 class Chars(object):
-    def __init__(self, string, filename):
+    def __init__(self, string):
         self.string = string
-        self.filename = filename
         self.index = 0
         self.line = 1
         self.pos = 1
@@ -119,7 +118,7 @@ class Chars(object):
         return Position(self.index, self.line, self.pos)
 
     def location_from(self, pos):
-        return Location(self.filename, pos, self.next_position)
+        return Location(pos, self.next_position)
 
 
 def read_slice(char_iter, valid_chars, type_, start=None):
@@ -128,7 +127,7 @@ def read_slice(char_iter, valid_chars, type_, start=None):
         next(char_iter)
     end = char_iter.next_position
     return Token(type_, char_iter.string[start:end],
-                 Location(char_iter.filename, start, end))
+                 Location(start, end))
 
 
 def read_string(char_iter, start, quote):
@@ -151,8 +150,8 @@ def read_string(char_iter, start, quote):
         "String does not and at EOF")
 
 
-def tokenize(string, filename='<string>'):
-    char_iter = Chars(string, filename)
+def tokenize(string):
+    char_iter = Chars(string)
     brackets = []
     indents = [1]
     for pos, ch in char_iter:
@@ -191,7 +190,7 @@ def tokenize(string, filename='<string>'):
                     continue
                 cur_indent = indents[-1]
                 new_indent = pos.column
-                loc = Location(filename, start, end)
+                loc = Location(start, end)
                 if new_indent < cur_indent:
                     try:
                         ident_pos = indents.index(new_indent)
