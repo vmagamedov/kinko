@@ -132,6 +132,16 @@ class _Optimizer(NodeTransformer):
         node.body = list(self._paste(node.body))
 
 
+def _copy_location(func):
+    def wrapper(node, as_statement):
+        for item in func(node, as_statement):
+            if not getattr(item, 'lineno', None):
+                item.lineno = node.location.start.line
+            yield item
+    return wrapper
+
+
+@_copy_location
 def compile_(node, as_statement):
     if isinstance(node, Tuple):
         sym, args = node.values[0], node.values[1:]
