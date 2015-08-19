@@ -38,7 +38,11 @@ class String(Node):
         super(String, self).__init__(**kw)
 
     def __repr__(self):
-        return '"{}"'.format(self.value.replace('"', '\\"'))
+        return '"{}"'.format(
+            repr(self.value)[1:-1]
+            .replace('\\"', '"').replace("\\'", "'")
+            .replace('"', '\\"')
+        )
 
     def accept(self, visitor):
         return visitor.visit_string(self)
