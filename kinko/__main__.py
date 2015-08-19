@@ -3,6 +3,7 @@ import sys
 import json
 import codecs
 import traceback
+from os.path import abspath
 
 from .utils import Buffer
 from .compat import _exec_in
@@ -36,7 +37,7 @@ with codecs.open(ctx_file, encoding='utf-8') as f:
 try:
     tokens = list(tokenize(src))
     mod = compile_module(parser().parse(tokens))
-    mod_code = compile(mod, '<kinko-template>', 'exec')
+    mod_code = compile(mod, abspath(src_file), 'exec')
 
     buf = Buffer()
     buf.push()
