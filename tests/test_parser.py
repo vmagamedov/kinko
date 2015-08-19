@@ -7,7 +7,7 @@ except ImportError:
 from funcparserlib.parser import NoParseError
 
 from kinko.nodes import Node, Symbol, Tuple, String, Number, Keyword, Dict, List
-from kinko.nodes import Placeholder
+from kinko.nodes import Placeholder, NodeVisitor
 from kinko.parser import parser
 
 from .test_tokenizer import TokenizeMixin
@@ -27,15 +27,25 @@ def node_ne(self, other):
     return not self.__eq__(other)
 
 
+class LocationChecker(NodeVisitor):
+
+    def visit(self, node):
+        assert node.location
+        super(LocationChecker, self).visit(node)
+
+
 class ParseMixin(TokenizeMixin):
 
     def parse(self, src):
         tokens = list(self.tokenize(src))
         try:
-            return parser().parse(tokens)
+            node = parser().parse(tokens)
         except NoParseError:
             print(tokens)
             raise
+        else:
+            LocationChecker().visit(node)
+            return node
 
 
 class TestParser(ParseMixin, TestCase):
