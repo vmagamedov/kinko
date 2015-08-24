@@ -1,6 +1,22 @@
 from .compat import with_metaclass
 
 
+class SymbolType(with_metaclass(type('T', (type,), {}), object)):
+    pass
+
+
+class StringType(with_metaclass(type('T', (type,), {}), object)):
+    pass
+
+
+class IntType(with_metaclass(type('T', (type,), {}), object)):
+    pass
+
+
+class OutputType(with_metaclass(type('T', (type,), {}), object)):
+    pass
+
+
 class TypingMeta(type):
 
     def __init__(cls, *args, **kwargs):
@@ -66,16 +82,20 @@ class QuotedMeta(TypingMeta):
         return '{}[{!r}]'.format(cls.__name__, cls.__arg_type__)
 
 class Quoted(with_metaclass(QuotedMeta, object)):
-
-    def __init__(self, value):
-        self.__quoted_value__ = value
-
-
-class StringType(object):
     pass
 
 
-class IntType(object):
+class ListTypeMeta(TypingMeta):
+
+    def __new__(typ, name, bases, namespace, item_type=None):
+        cls = TypingMeta.__new__(typ, name, bases, namespace)
+        cls.__item_type__ = item_type
+        return cls
+
+    def __repr__(cls):
+        return '{}[{!r}]'.format(cls.__name__, cls.__item_type__)
+
+class ListType(with_metaclass(ListTypeMeta, object)):
     pass
 
 
@@ -90,29 +110,5 @@ class DictTypeMeta(TypingMeta):
         return '{}[{!r}={!r}]'.format(cls.__name__, cls.__key_type__,
                                       cls.__value_type__)
 
-
 class DictType(with_metaclass(DictTypeMeta, object)):
-    pass
-
-
-class OutputType(object):
-    pass
-
-
-class SymbolType(object):
-    pass
-
-
-class CollectionTypeMeta(TypingMeta):
-
-    def __new__(typ, name, bases, namespace, item_type=None):
-        cls = TypingMeta.__new__(typ, name, bases, namespace)
-        cls.__item_type__ = item_type
-        return cls
-
-    def __repr__(cls):
-        return '{}[{!r}]'.format(cls.__name__, cls.__item_type__)
-
-
-class CollectionType(with_metaclass(CollectionTypeMeta, object)):
     pass

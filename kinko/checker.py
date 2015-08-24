@@ -1,8 +1,12 @@
 from itertools import chain
 
-from .scope import Scope
-from .nodes import Tuple, Keyword
-from .types import *
+from .nodes import Tuple, Number, Keyword, String, List, Symbol
+from .types import IntType, NamedArgMeta, StringType, ListType, VarArgsMeta
+from .types import QuotedMeta
+
+
+class KinkoTypeError(TypeError):
+    pass
 
 
 def split_args(args):
@@ -15,7 +19,7 @@ def split_args(args):
                 try:
                     val = next(i)
                 except StopIteration:
-                    raise TypeError('Missing named argument value')
+                    raise KinkoTypeError('Missing named argument value')
                 else:
                     kw_args[arg.name] = val
             else:
@@ -32,119 +36,95 @@ def unsplit_args(pos_args, kw_args):
     return args
 
 
-def gen_func_type(placeholders):
-    # TODO: implement
-    return Func[[], None]
+def check_type(var, expected_type):
+    if type(var.__type__) is not type(expected_type):
+        raise KinkoTypeError('Unexpected type: {!r}, instead of: {!r}'
+                             .format(var.__type__, expected_type))
 
 
-def check_arg(value, type_, scope):
+def check_arg(value, type_, env):
     if not isinstance(type_, QuotedMeta):
-        value, scope = check(value, scope)
+        value = check(value, env)
         check_type(value, type_)
-        return value, scope
+        return value
     else:
-        return type_(value), scope
+        return value
 
 
-def check_args(args, kwargs, ftype, scope):
-    args, kwargs = list(args), dict(kwargs)
-    checked_args, checked_kwargs = [], {}
+def check_args(pos_args, kw_args, op_type, env):
+    pos_args, kw_args = pos_args[:], kw_args.copy()
+    typed_pos_args, typed_kw_args = [], {}
 
-    for arg in ftype.__args__:
-        if isinstance(arg, NamedArgMeta):
+    for i, arg_type in enumerate(op_type.__args__):
+        if isinstance(arg_type, NamedArgMeta):
             try:
-                value = kwargs.pop(arg.__arg_name__)
+                value = kw_args.pop(arg_type.__arg_name__)
             except KeyError:
-                raise TypeError('Missing named argument: {!r}'.format(arg))
+                raise KinkoTypeError('Missing named argument: {!r}'
+                                     .format(arg_type))
             else:
-                value, scope = check_arg(value, arg.__arg_type__, scope)
-                checked_kwargs[arg.__arg_name__] = value
-        elif isinstance(arg, VarArgsMeta):
-            varargs = []
-            for item in args:
-                item, scope = check_arg(item, arg.__arg_type__, scope)
-                varargs.append(item)
-            checked_args.append(varargs)
-            args = []
+                typed_value = check_arg(value, arg_type.__arg_type__, env)
+                typed_kw_args[arg_type.__arg_name__] = typed_value
+        elif isinstance(arg_type, VarArgsMeta):
+            typed_pos_args.append([
+                check_arg(item, arg_type.__arg_type__, env)
+                for item in pos_args
+            ])
+            pos_args = []
         else:
             try:
-                value = args.pop(0)
+                value = pos_args.pop(0)
             except IndexError:
-                raise TypeError('Missing positional argument: {!r}'.format(arg))
+                raise KinkoTypeError('Missing positional argument: {!r}'
+                                     .format(arg_type))
             else:
-                value, scope = check_arg(value, arg, scope)
-                checked_args.append(value)
+                typed_value = check_arg(value, arg_type, env)
+                typed_pos_args.append(typed_value)
 
-    if args or kwargs:
-        raise TypeError('More arguments than expected')
+    if pos_args or kw_args:
+        raise KinkoTypeError('More arguments than expected')
 
-    return checked_args, checked_kwargs, scope
+    return typed_pos_args, typed_kw_args
 
 
-def check(node, scope):
+def check(node, env):
     if isinstance(node, Tuple):
-        if not node.values:
-            raise TypeError('Empty tuple')
-        name_sym, rest = node.values[0], node.values[1:]
-        func = scope.lookup(name_sym.name)
-        if not isinstance(func, FuncMeta):
-            raise TypeError('Not a Func type')
-        return check_expr(name_sym.name, func, rest, scope)
-    raise TypeError('Unknown type: {!r}'.format(node))
+        sym, args = node.values[0], node.values[1:]
+        pos_args, kw_args = split_args(args)
 
+        op_type = env[sym.name]
+        sym = Symbol.typed(op_type, sym.name)
+        pos_args, kw_args = check_args(pos_args, kw_args,
+                                       op_type, env)
+        if sym.name == 'let':
+            pairs, let_body = pos_args
+            let_env = env.copy()
+            typed_pairs = []
+            for let_sym, let_expr in zip(pairs.values[::2], pairs.values[1::2]):
+                let_expr = check(let_expr, env)
+                let_sym = Symbol.typed(let_expr.__type__, let_sym.name)
+                let_env[let_sym.name] = let_sym.__type__
+                typed_pairs.append(let_sym)
+                typed_pairs.append(let_expr)
+            let_body = [check(item, let_env) for item in let_body]
+            pos_args = [List(typed_pairs)] + let_body
+            result_type = let_body[-1].__type__
+        else:
+            result_type = op_type.__result__
 
-def check_expr(fname, ftype, args, scope):
-    pos_args, kw_args = split_args(args)
-    pos_args, kw_args, scope = check_args(pos_args, kw_args, ftype, scope)
+        args = unsplit_args(pos_args, kw_args)
+        return Tuple.typed(result_type, [sym] + args)
 
-    if fname == 'each':
-        var, col, quoted_body = pos_args
-        body_scope = Scope(scope)
-        body_scope = body_scope.define_symbol(var.name, col.__item_type__)
-        body = []
-        for item in quoted_body:
-            item, body_scope = check_arg(item.__quoted_value__,
-                                         item.__arg_type__, body_scope)
-            body.append(item)
-        scope = scope.add_child(body_scope)
-        pos_args = var, col, body
+    elif isinstance(node, Symbol):
+        return Symbol.typed(env[node.name], node.name)
 
-    elif fname == 'def':
-        name, quoted_body = pos_args
-        body_scope = Scope(scope)
-        body = []
-        for item in quoted_body:
-            item, body_scope = check_arg(item.__quoted_value__,
-                                         item.__arg_type__, body_scope)
-            body.append(item)
-        func_type = gen_func_type(body_scope.placeholders)
-        scope = scope.add_child(body_scope)
-        scope = scope.define_symbol(name, func_type)
-        pos_args = name, body
+    elif isinstance(node, String):
+        return String.typed(StringType, node.value)
 
-    else:
-        raise NotImplementedError
+    elif isinstance(node, Number):
+        return Number.typed(IntType, node.value)
 
-    args = unsplit_args(pos_args, kw_args)
-    return Tuple.typed(ftype.__result__, *args), scope
+    elif isinstance(node, List):
+        return List.typed(ListType, node.values)
 
-
-def check_type(var, expected_type):
-    if var.__type__ is not expected_type:
-        raise TypeError('Unexpected type: {!r}, instead of: {!r}'
-                        .format(var.__type__, expected_type))
-
-
-global_scope = Scope(None)
-global_scope.define_symbol('div', Func[
-    [DictType[StringType, StringType], VarArgs[OutputType]],
-    OutputType,
-])
-global_scope.define_symbol('each', Func[
-    [SymbolType, CollectionType, VarArgs[Quoted[OutputType]]],
-    OutputType,
-])
-global_scope.define_symbol('def', Func[
-    [SymbolType, VarArgs[Quoted[OutputType]]],
-    Func,
-])
+    raise NotImplementedError(repr(node))
