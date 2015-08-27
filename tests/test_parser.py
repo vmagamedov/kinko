@@ -15,7 +15,7 @@ from .test_tokenizer import TokenizeMixin
 
 def node_eq(self, other):
     if type(self) is not type(other):
-        return
+        return False
     d1 = dict(self.__dict__)
     d1.pop('location', None)
     d2 = dict(other.__dict__)

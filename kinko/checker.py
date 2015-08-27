@@ -1,8 +1,8 @@
 from itertools import chain
 
-from .nodes import Tuple, Number, Keyword, String, List, Symbol
+from .nodes import Tuple, Number, Keyword, String, List, Symbol, Placeholder
 from .types import IntType, NamedArgMeta, StringType, ListType, VarArgsMeta
-from .types import QuotedMeta
+from .types import QuotedMeta, TypeVarMeta, TypeVar, Func, NamedArg
 
 
 class KinkoTypeError(TypeError):
@@ -37,9 +37,18 @@ def unsplit_args(pos_args, kw_args):
 
 
 def check_type(var, expected_type):
-    if type(var.__type__) is not type(expected_type):
-        raise KinkoTypeError('Unexpected type: {!r}, instead of: {!r}'
-                             .format(var.__type__, expected_type))
+    if isinstance(var.__type__, TypeVarMeta):
+        if var.__type__.__instance__ is None:
+            var.__type__.__instance__ = expected_type
+        else:
+            if type(var.__type__.__instance__) is not type(expected_type):
+                raise KinkoTypeError
+            else:
+                raise NotImplementedError
+    else:
+        if type(var.__type__) is not type(expected_type):
+            raise KinkoTypeError('Unexpected type: {!r}, instead of: {!r}'
+                                 .format(var.__type__, expected_type))
 
 
 def check_arg(value, type_, env):
@@ -98,9 +107,11 @@ def check(node, env):
                                        op_type, env)
         if sym.name == 'let':
             pairs, let_body = pos_args
+            assert isinstance(pairs, List), repr(pairs)
             let_env = env.copy()
             typed_pairs = []
             for let_sym, let_expr in zip(pairs.values[::2], pairs.values[1::2]):
+                assert isinstance(let_sym, Symbol), repr(let_sym)
                 let_expr = check(let_expr, env)
                 let_sym = Symbol.typed(let_expr.__type__, let_sym.name)
                 let_env[let_sym.name] = let_sym.__type__
@@ -109,6 +120,18 @@ def check(node, env):
             let_body = [check(item, let_env) for item in let_body]
             pos_args = [List(typed_pairs)] + let_body
             result_type = let_body[-1].__type__
+
+        elif sym.name == 'def':
+            def_sym, def_body = pos_args
+            assert isinstance(def_sym, Symbol), repr(def_sym)
+            def_env = env.copy()
+            def_body = [check(item, def_env) for item in def_body]
+            pos_args = [def_sym] + def_body
+            def_args = [NamedArg[name, typ.__instance__]
+                        for name, typ in def_env.items()
+                        if isinstance(typ, TypeVarMeta)]
+            result_type = Func[def_args, def_body[-1].__type__]
+
         else:
             result_type = op_type.__result__
 
@@ -117,6 +140,10 @@ def check(node, env):
 
     elif isinstance(node, Symbol):
         return Symbol.typed(env[node.name], node.name)
+
+    elif isinstance(node, Placeholder):
+        return Placeholder.typed(env.setdefault(node.name, TypeVar[None]),
+                                 node.name)
 
     elif isinstance(node, String):
         return String.typed(StringType, node.value)

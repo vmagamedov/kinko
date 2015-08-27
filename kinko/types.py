@@ -1,23 +1,31 @@
 from .compat import with_metaclass
 
 
-class SymbolType(with_metaclass(type('T', (type,), {}), object)):
+class TypingMetaBase(type):
     pass
 
 
-class StringType(with_metaclass(type('T', (type,), {}), object)):
+def _type_base():
+    return TypingMetaBase('T', (TypingMetaBase,), {})
+
+
+class SymbolType(with_metaclass(_type_base(), object)):
     pass
 
 
-class IntType(with_metaclass(type('T', (type,), {}), object)):
+class StringType(with_metaclass(_type_base(), object)):
     pass
 
 
-class OutputType(with_metaclass(type('T', (type,), {}), object)):
+class IntType(with_metaclass(_type_base(), object)):
     pass
 
 
-class TypingMeta(type):
+class OutputType(with_metaclass(_type_base(), object)):
+    pass
+
+
+class TypingMeta(TypingMetaBase):
 
     def __init__(cls, *args, **kwargs):
         pass
@@ -25,6 +33,20 @@ class TypingMeta(type):
     def __getitem__(cls, parameters):
         return cls.__class__(cls.__name__, cls.__bases__, dict(cls.__dict__),
                              parameters)
+
+
+class TypeVarMeta(TypingMeta):
+
+    def __new__(typ, name, bases, namespace, instance=None):
+        cls = TypingMeta.__new__(typ, name, bases, namespace)
+        cls.__instance__ = instance
+        return cls
+
+    def __repr__(cls):
+        return '{}[{!r}]'.format(cls.__name__, cls.__instance__)
+
+class TypeVar(with_metaclass(TypeVarMeta, object)):
+    pass
 
 
 class FuncMeta(TypingMeta):
