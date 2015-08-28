@@ -1,12 +1,24 @@
 from itertools import chain
 
 from .nodes import Tuple, Number, Keyword, String, List, Symbol, Placeholder
+from .nodes import NodeVisitor
 from .types import IntType, NamedArgMeta, StringType, ListType, VarArgsMeta
 from .types import QuotedMeta, TypeVarMeta, TypeVar, Func, NamedArg
 
 
 class KinkoTypeError(TypeError):
     pass
+
+
+class _PlaceholdersExtractor(NodeVisitor):
+
+    def __init__(self):
+        # using list to preserve placeholders order for the tests
+        self.placeholders = []
+
+    def visit_placeholder(self, node):
+        if node.name not in self.placeholders:
+            self.placeholders.append(node.name)
 
 
 def split_args(args):
@@ -36,35 +48,32 @@ def unsplit_args(pos_args, kw_args):
     return args
 
 
-def check_type(var, expected_type):
-    if isinstance(var.__type__, TypeVarMeta):
-        if var.__type__.__instance__ is None:
-            var.__type__.__instance__ = expected_type
+def unify(t1, t2):
+    if isinstance(t1, TypeVarMeta):
+        if t1.__instance__ is None:
+            t1.__instance__ = t2
         else:
-            if type(var.__type__.__instance__) is not type(expected_type):
-                raise KinkoTypeError
-            else:
-                raise NotImplementedError
+            unify(t1.__instance__, t2)
     else:
-        if type(var.__type__) is not type(expected_type):
+        if type(t1) is not type(t2):
             raise KinkoTypeError('Unexpected type: {!r}, instead of: {!r}'
-                                 .format(var.__type__, expected_type))
+                                 .format(t1, t2))
 
 
-def check_arg(value, type_, env):
+def check_arg(arg, type_, env):
     if not isinstance(type_, QuotedMeta):
-        value = check(value, env)
-        check_type(value, type_)
-        return value
+        arg = check(arg, env)
+        unify(arg.__type__, type_)
+        return arg
     else:
-        return value
+        return arg
 
 
-def check_args(pos_args, kw_args, op_type, env):
+def check_args(pos_args, kw_args, fn_type, env):
     pos_args, kw_args = pos_args[:], kw_args.copy()
     typed_pos_args, typed_kw_args = [], {}
 
-    for i, arg_type in enumerate(op_type.__args__):
+    for i, arg_type in enumerate(fn_type.__args__):
         if isinstance(arg_type, NamedArgMeta):
             try:
                 value = kw_args.pop(arg_type.__arg_name__)
@@ -101,10 +110,10 @@ def check(node, env):
         sym, args = node.values[0], node.values[1:]
         pos_args, kw_args = split_args(args)
 
-        op_type = env[sym.name]
-        sym = Symbol.typed(op_type, sym.name)
+        fn_type = env[sym.name]
+        sym = Symbol.typed(fn_type, sym.name)
         pos_args, kw_args = check_args(pos_args, kw_args,
-                                       op_type, env)
+                                       fn_type, env)
         if sym.name == 'let':
             pairs, let_body = pos_args
             assert isinstance(pairs, List), repr(pairs)
@@ -124,16 +133,20 @@ def check(node, env):
         elif sym.name == 'def':
             def_sym, def_body = pos_args
             assert isinstance(def_sym, Symbol), repr(def_sym)
+            visitor = _PlaceholdersExtractor()
+            [visitor.visit(n) for n in def_body]
+            ph_names = visitor.placeholders
             def_env = env.copy()
+            for ph_name in ph_names:
+                def_env[ph_name] = TypeVar[None]
             def_body = [check(item, def_env) for item in def_body]
             pos_args = [def_sym] + def_body
-            def_args = [NamedArg[name, typ.__instance__]
-                        for name, typ in def_env.items()
-                        if isinstance(typ, TypeVarMeta)]
+            def_args = [NamedArg[ph_name, def_env[ph_name].__instance__]
+                        for ph_name in ph_names]
             result_type = Func[def_args, def_body[-1].__type__]
 
         else:
-            result_type = op_type.__result__
+            result_type = fn_type.__result__
 
         args = unsplit_args(pos_args, kw_args)
         return Tuple.typed(result_type, [sym] + args)
@@ -142,8 +155,7 @@ def check(node, env):
         return Symbol.typed(env[node.name], node.name)
 
     elif isinstance(node, Placeholder):
-        return Placeholder.typed(env.setdefault(node.name, TypeVar[None]),
-                                 node.name)
+        return Placeholder.typed(env[node.name], node.name)
 
     elif isinstance(node, String):
         return String.typed(StringType, node.value)

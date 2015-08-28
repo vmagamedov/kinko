@@ -2,7 +2,9 @@ from .compat import with_metaclass
 
 
 class TypingMetaBase(type):
-    pass
+
+    def __repr__(cls):
+        return cls.__name__
 
 
 def _type_base():

@@ -18,9 +18,18 @@ def node_eq(self, other):
         return False
     d1 = dict(self.__dict__)
     d1.pop('location', None)
+    t1 = d1.pop('__type__', None)
     d2 = dict(other.__dict__)
     d2.pop('location', None)
-    return d1 == d2
+    t2 = d2.pop('__type__', None)
+    if d1 == d2:
+        if t1 == t2:
+            return True
+        else:
+            raise AssertionError('Types mismatch {!r} != {!r} for expression '
+                                 '`{!r}`'.format(t1, t2, self))
+    else:
+        return False
 
 
 def node_ne(self, other):

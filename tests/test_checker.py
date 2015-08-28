@@ -28,16 +28,12 @@ def type_ne(self, other):
     return not self.__eq__(other)
 
 
-INC_TYPE = Func[[IntType], IntType]
-INC2_TYPE = Func[[IntType, NamedArg['step', IntType]], IntType]
-LET_TYPE = Func[[Quoted, VarArgs[Quoted]], None]  # FIXME
+LET_TYPE = Func[[Quoted, VarArgs[Quoted]], None]
 DEF_TYPE = Func[[Quoted, VarArgs[Quoted]], None]
 
 
 class TestChecker(ParseMixin, TestCase):
-    env = {
-        'inc': INC_TYPE,
-        'inc2': INC2_TYPE,
+    default_env = {
         'let': LET_TYPE,
         'def': DEF_TYPE,
     }
@@ -56,8 +52,9 @@ class TestChecker(ParseMixin, TestCase):
         self.type_patcher.stop()
         self.node_patcher.stop()
 
-    def assertChecks(self, src, typed):
-        self.assertEqual(check(self.parse_expr(src), self.env), typed)
+    def assertChecks(self, src, typed, extra_env=None):
+        env = dict(self.default_env, **(extra_env or {}))
+        self.assertEqual(check(self.parse_expr(src), env), typed)
 
     def testSplitArgs(self):
         self.assertEqual(
@@ -76,21 +73,27 @@ class TestChecker(ParseMixin, TestCase):
             split_args([Number(1), Keyword('foo')])
 
     def testSimple(self):
+        inc_type = Func[[IntType], IntType]
         self.assertChecks(
             'inc 1',
-            Tuple.typed(IntType, [Symbol.typed(INC_TYPE, 'inc'),
+            Tuple.typed(IntType, [Symbol.typed(inc_type, 'inc'),
                                   Number.typed(IntType, 1)]),
+            {'inc': inc_type},
         )
+
+        inc_step_type = Func[[IntType, NamedArg['step', IntType]], IntType]
         self.assertChecks(
-            'inc2 1 :step 2',
-            Tuple.typed(IntType, [Symbol.typed(INC2_TYPE, 'inc2'),
+            'inc-step 1 :step 2',
+            Tuple.typed(IntType, [Symbol.typed(inc_step_type, 'inc-step'),
                                   Number.typed(IntType, 1),
                                   Keyword('step'), Number.typed(IntType, 2)]),
+            {'inc-step': inc_step_type},
         )
         with self.assertRaises(KinkoTypeError):
-            check(self.parse_expr('inc "foo"'), self.env)
+            check(self.parse_expr('inc "foo"'), {'inc': inc_type})
 
     def testLet(self):
+        inc_type = Func[[IntType], IntType]
         self.assertChecks(
             'let [x 1] (inc x)',
             Tuple.typed(IntType, [
@@ -100,13 +103,15 @@ class TestChecker(ParseMixin, TestCase):
                     Number.typed(IntType, 1),
                 ]),
                 Tuple.typed(IntType, [
-                    Symbol.typed(INC_TYPE, 'inc'),
+                    Symbol.typed(inc_type, 'inc'),
                     Symbol.typed(IntType, 'x'),
                 ]),
             ]),
+            {'inc': inc_type},
         )
 
-    def testTypeVar(self):
+    def testInfer(self):
+        inc_type = Func[[IntType], IntType]
         foo_type = Func[[NamedArg['arg', IntType]], IntType]
         self.assertChecks(
             """
@@ -117,8 +122,9 @@ class TestChecker(ParseMixin, TestCase):
                 Symbol.typed(DEF_TYPE, 'def'),
                 Symbol('foo'),
                 Tuple.typed(IntType, [
-                    Symbol.typed(INC_TYPE, 'inc'),
+                    Symbol.typed(inc_type, 'inc'),
                     Placeholder.typed(TypeVar[IntType], 'arg'),
                 ])
             ]),
+            {'inc': inc_type},
         )
