@@ -136,3 +136,17 @@ class DictTypeMeta(TypingMeta):
 
 class DictType(with_metaclass(DictTypeMeta, object)):
     pass
+
+
+class RecordTypeMeta(TypingMeta):
+
+    def __new__(typ, name, bases, namespace, parameters=None):
+        cls = TypingMeta.__new__(typ, name, bases, namespace)
+        cls.__items__ = parameters or {}
+        return cls
+
+    def __repr__(cls):
+        return '{}[{!r}]'.format(cls.__name__, cls.__items__)
+
+class RecordType(with_metaclass(RecordTypeMeta, object)):
+    pass

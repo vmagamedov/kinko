@@ -6,7 +6,7 @@ except ImportError:
 
 from kinko.nodes import Tuple, Symbol, Number, Node, Keyword, List, Placeholder
 from kinko.types import Func, IntType, NamedArg, Quoted, VarArgs, TypeVar
-from kinko.types import TypingMetaBase
+from kinko.types import TypingMetaBase, RecordType
 from kinko.checker import check, split_args, unsplit_args, KinkoTypeError
 
 from .test_parser import node_eq, node_ne, ParseMixin
@@ -30,12 +30,14 @@ def type_ne(self, other):
 
 LET_TYPE = Func[[Quoted, VarArgs[Quoted]], None]
 DEF_TYPE = Func[[Quoted, VarArgs[Quoted]], None]
+GET_TYPE = Func[[Quoted, Quoted], None]
 
 
 class TestChecker(ParseMixin, TestCase):
     default_env = {
         'let': LET_TYPE,
         'def': DEF_TYPE,
+        'get': GET_TYPE,
     }
 
     def parse_expr(self, src):
@@ -124,6 +126,30 @@ class TestChecker(ParseMixin, TestCase):
                 Tuple.typed(IntType, [
                     Symbol.typed(inc_type, 'inc'),
                     Placeholder.typed(TypeVar[IntType], 'arg'),
+                ])
+            ]),
+            {'inc': inc_type},
+        )
+
+    def testRecord(self):
+        data_type = RecordType[{'attr': TypeVar[IntType]}]
+        inc_type = Func[[IntType], IntType]
+        foo_type = Func[[NamedArg['arg', data_type]], IntType]
+        self.assertChecks(
+            """
+            def foo
+              inc #arg.attr
+            """,
+            Tuple.typed(foo_type, [
+                Symbol.typed(DEF_TYPE, 'def'),
+                Symbol('foo'),
+                Tuple.typed(IntType, [
+                    Symbol.typed(inc_type, 'inc'),
+                    Tuple.typed(TypeVar[IntType], [
+                        Symbol.typed(GET_TYPE, 'get'),
+                        Placeholder.typed(TypeVar[data_type], 'arg'),
+                        Symbol('attr'),
+                    ]),
                 ])
             ]),
             {'inc': inc_type},

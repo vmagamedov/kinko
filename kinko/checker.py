@@ -3,7 +3,7 @@ from itertools import chain
 from .nodes import Tuple, Number, Keyword, String, List, Symbol, Placeholder
 from .nodes import NodeVisitor
 from .types import IntType, NamedArgMeta, StringType, ListType, VarArgsMeta
-from .types import QuotedMeta, TypeVarMeta, TypeVar, Func, NamedArg
+from .types import QuotedMeta, TypeVarMeta, TypeVar, Func, NamedArg, RecordType
 
 
 class KinkoTypeError(TypeError):
@@ -46,6 +46,13 @@ def unsplit_args(pos_args, kw_args):
         (Keyword(k), v) for k, v in kw_args.items()
     ))
     return args
+
+
+def get_type(node):
+    t = node.__type__
+    while isinstance(t, TypeVarMeta):
+        t = t.__instance__
+    return t
 
 
 def unify(t1, t2):
@@ -144,6 +151,14 @@ def check(node, env):
             def_args = [NamedArg[ph_name, def_env[ph_name].__instance__]
                         for ph_name in ph_names]
             result_type = Func[def_args, def_body[-1].__type__]
+
+        elif sym.name == 'get':
+            obj, attr = pos_args
+            obj = check(obj, env)
+            assert isinstance(attr, Symbol)
+            unify(obj.__type__, RecordType[{attr.name: TypeVar[None]}])
+            pos_args = obj, attr
+            result_type = get_type(obj).__items__[attr.name]
 
         else:
             result_type = fn_type.__result__
