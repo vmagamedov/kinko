@@ -4,7 +4,7 @@ from .nodes import Tuple, Number, Keyword, String, List, Symbol, Placeholder
 from .nodes import NodeVisitor
 from .types import IntType, NamedArgMeta, StringType, ListType, VarArgsMeta
 from .types import QuotedMeta, TypeVarMeta, TypeVar, Func, NamedArg, RecordType
-from .types import RecordTypeMeta
+from .types import RecordTypeMeta, BoolType, Union
 
 
 class KinkoTypeError(TypeError):
@@ -63,7 +63,11 @@ def unify(t1, t2):
         else:
             unify(t1.__instance__, t2)
     else:
-        if type(t1) is not type(t2):
+        if (
+            type(t1) is not type(t2) and not
+            # FIXME: replace this hack
+            (t2 is BoolType and t1 in {StringType, IntType})
+        ):
             raise KinkoTypeError('Unexpected type: {!r}, instead of: {!r}'
                                  .format(t1, t2))
 
@@ -167,6 +171,15 @@ def check(node, env):
             unify(obj.__type__, RecordType[{attr.name: TypeVar[None]}])
             pos_args = obj, attr
             result_type = get_type(obj).__items__[attr.name]
+
+        elif sym.name == 'if':
+            expr, then_, else_ = pos_args
+            expr = check(expr, env)
+            unify(expr.__type__, BoolType)
+            then_ = check(then_, env)
+            else_ = check(else_, env)
+            pos_args = expr, then_, else_
+            result_type = Union[then_.__type__, else_.__type__]
 
         else:
             result_type = fn_type.__result__

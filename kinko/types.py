@@ -11,7 +11,7 @@ def _type_base():
     return TypingMetaBase('T', (TypingMetaBase,), {})
 
 
-class SymbolType(with_metaclass(_type_base(), object)):
+class BoolType(with_metaclass(_type_base(), object)):
     pass
 
 
@@ -48,6 +48,20 @@ class TypeVarMeta(TypingMeta):
 
 
 class TypeVar(with_metaclass(TypeVarMeta, object)):
+    pass
+
+
+class UnionMeta(TypingMeta):
+
+    def __cls_init__(cls, types):
+        cls.__types__ = (types,) if not isinstance(types, tuple) else types
+
+    def __repr__(cls):
+        return '{}[{}]'.format(cls.__name__,
+                               '|'.join(map(repr, cls.__types__)))
+
+
+class Union(with_metaclass(UnionMeta, object)):
     pass
 
 

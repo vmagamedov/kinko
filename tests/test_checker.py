@@ -5,7 +5,7 @@ except ImportError:
     from mock import patch
 
 from kinko.nodes import Tuple, Symbol, Number, Node, Keyword, List, Placeholder
-from kinko.types import Func, IntType, NamedArg, Quoted, VarArgs, TypeVar
+from kinko.types import Func, IntType, NamedArg, Quoted, VarArgs, TypeVar, Union
 from kinko.types import TypingMetaBase, RecordType
 from kinko.checker import check, split_args, unsplit_args, KinkoTypeError
 
@@ -28,9 +28,10 @@ def type_ne(self, other):
     return not self.__eq__(other)
 
 
-LET_TYPE = Func[[Quoted, VarArgs[Quoted]], None]
-DEF_TYPE = Func[[Quoted, VarArgs[Quoted]], None]
-GET_TYPE = Func[[Quoted, Quoted], None]
+LET_TYPE = Func[[Quoted, VarArgs[Quoted]], TypeVar[None]]
+DEF_TYPE = Func[[Quoted, VarArgs[Quoted]], TypeVar[None]]
+GET_TYPE = Func[[Quoted, Quoted], TypeVar[None]]
+IF_TYPE = Func[[Quoted, Quoted, Quoted], TypeVar[None]]
 
 
 class TestChecker(ParseMixin, TestCase):
@@ -38,6 +39,7 @@ class TestChecker(ParseMixin, TestCase):
         'let': LET_TYPE,
         'def': DEF_TYPE,
         'get': GET_TYPE,
+        'if': IF_TYPE,
     }
 
     def parse_expr(self, src):
@@ -183,4 +185,47 @@ class TestChecker(ParseMixin, TestCase):
                 ])
             ]),
             {'sum': sum_type},
+        )
+
+    def testEnvVar(self):
+        foo_type = Func[[], IntType]
+        inc_type = Func[[IntType], IntType]
+        self.assertChecks(
+            """
+            def foo
+              inc var
+            """,
+            Tuple.typed(foo_type, [
+                Symbol.typed(DEF_TYPE, 'def'),
+                Symbol('foo'),
+                Tuple.typed(IntType, [
+                    Symbol.typed(inc_type, 'inc'),
+                    Symbol.typed(IntType, 'var'),
+                ]),
+            ]),
+            {'inc': inc_type, 'var': IntType},
+        )
+
+    def testIf(self):
+        inc_type = Func[[IntType], IntType]
+        self.assertChecks(
+            """
+            if (inc 1) (inc 2) (inc 3)
+            """,
+            Tuple.typed(Union[IntType, IntType], [
+                Symbol.typed(IF_TYPE, 'if'),
+                Tuple.typed(IntType, [
+                    Symbol.typed(inc_type, 'inc'),
+                    Number.typed(IntType, 1),
+                ]),
+                Tuple.typed(IntType, [
+                    Symbol.typed(inc_type, 'inc'),
+                    Number.typed(IntType, 2),
+                ]),
+                Tuple.typed(IntType, [
+                    Symbol.typed(inc_type, 'inc'),
+                    Number.typed(IntType, 3),
+                ]),
+            ]),
+            {'inc': inc_type},
         )
