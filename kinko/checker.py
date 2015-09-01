@@ -4,6 +4,7 @@ from .nodes import Tuple, Number, Keyword, String, List, Symbol, Placeholder
 from .nodes import NodeVisitor
 from .types import IntType, NamedArgMeta, StringType, ListType, VarArgsMeta
 from .types import QuotedMeta, TypeVarMeta, TypeVar, Func, NamedArg, RecordType
+from .types import RecordTypeMeta
 
 
 class KinkoTypeError(TypeError):
@@ -65,6 +66,13 @@ def unify(t1, t2):
         if type(t1) is not type(t2):
             raise KinkoTypeError('Unexpected type: {!r}, instead of: {!r}'
                                  .format(t1, t2))
+
+        if isinstance(t1, RecordTypeMeta) and isinstance(t2, RecordTypeMeta):
+            for key, value in t2.__items__.items():
+                if key in t1.__items__:
+                    unify(t1.__items__[key], value)
+                else:
+                    t1.__items__[key] = value
 
 
 def check_arg(arg, type_, env):

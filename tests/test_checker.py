@@ -154,3 +154,33 @@ class TestChecker(ParseMixin, TestCase):
             ]),
             {'inc': inc_type},
         )
+
+    def testRecordUnify(self):
+        data_type = RecordType[{'attr1': TypeVar[IntType],
+                                'attr2': TypeVar[IntType]}]
+        sum_type = Func[[IntType, IntType], IntType]
+        foo_type = Func[[NamedArg['arg', data_type]], IntType]
+        self.assertChecks(
+            """
+            def foo
+              sum #arg.attr1 #arg.attr2
+            """,
+            Tuple.typed(foo_type, [
+                Symbol.typed(DEF_TYPE, 'def'),
+                Symbol('foo'),
+                Tuple.typed(IntType, [
+                    Symbol.typed(sum_type, 'sum'),
+                    Tuple.typed(TypeVar[IntType], [
+                        Symbol.typed(GET_TYPE, 'get'),
+                        Placeholder.typed(TypeVar[data_type], 'arg'),
+                        Symbol('attr1'),
+                    ]),
+                    Tuple.typed(TypeVar[IntType], [
+                        Symbol.typed(GET_TYPE, 'get'),
+                        Placeholder.typed(TypeVar[data_type], 'arg'),
+                        Symbol('attr2'),
+                    ]),
+                ])
+            ]),
+            {'sum': sum_type},
+        )
