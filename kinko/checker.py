@@ -62,6 +62,8 @@ def unify(t1, t2):
             t1.__instance__ = t2
         else:
             unify(t1.__instance__, t2)
+    elif isinstance(t2, TypeVarMeta) and t2.__instance__ is None:
+        pass
     else:
         if (
             type(t1) is not type(t2) and not
@@ -180,6 +182,17 @@ def check(node, env):
             else_ = check(else_, env)
             pos_args = expr, then_, else_
             result_type = Union[then_.__type__, else_.__type__]
+
+        elif sym.name == 'each':
+            item_sym, item_col, each_body = pos_args
+            assert isinstance(item_sym, Symbol)
+            item_sym = Symbol.typed(get_type(item_col).__item_type__,
+                                    item_sym.name)
+            each_env = env.copy()
+            each_env[item_sym.name] = item_sym.__type__
+            each_body = [check(item, each_env) for item in each_body]
+            pos_args = [item_sym, item_col] + each_body
+            result_type = ListType[each_body[-1].__type__]
 
         else:
             result_type = fn_type.__result__

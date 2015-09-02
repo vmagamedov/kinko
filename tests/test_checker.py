@@ -6,7 +6,7 @@ except ImportError:
 
 from kinko.nodes import Tuple, Symbol, Number, Node, Keyword, List, Placeholder
 from kinko.types import Func, IntType, NamedArg, Quoted, VarArgs, TypeVar, Union
-from kinko.types import TypingMetaBase, RecordType
+from kinko.types import TypingMetaBase, RecordType, ListType
 from kinko.checker import check, split_args, unsplit_args, KinkoTypeError
 
 from .test_parser import node_eq, node_ne, ParseMixin
@@ -32,6 +32,7 @@ LET_TYPE = Func[[Quoted, VarArgs[Quoted]], TypeVar[None]]
 DEF_TYPE = Func[[Quoted, VarArgs[Quoted]], TypeVar[None]]
 GET_TYPE = Func[[Quoted, Quoted], TypeVar[None]]
 IF_TYPE = Func[[Quoted, Quoted, Quoted], TypeVar[None]]
+EACH_TYPE = Func[[Quoted, ListType[None], VarArgs[Quoted]], TypeVar[None]]
 
 
 class TestChecker(ParseMixin, TestCase):
@@ -40,6 +41,7 @@ class TestChecker(ParseMixin, TestCase):
         'def': DEF_TYPE,
         'get': GET_TYPE,
         'if': IF_TYPE,
+        'each': EACH_TYPE,
     }
 
     def parse_expr(self, src):
@@ -228,4 +230,30 @@ class TestChecker(ParseMixin, TestCase):
                 ]),
             ]),
             {'inc': inc_type},
+        )
+
+    def testEach(self):
+        inc_type = Func[[IntType], IntType]
+        rec_type = RecordType[{'attr': IntType}]
+        list_rec_type = ListType[rec_type]
+        self.assertChecks(
+            """
+            each i collection
+              inc i.attr
+            """,
+            Tuple.typed(ListType[IntType], [
+                Symbol.typed(EACH_TYPE, 'each'),
+                Symbol.typed(rec_type, 'i'),
+                Symbol.typed(list_rec_type, 'collection'),
+                Tuple.typed(IntType, [
+                    Symbol.typed(inc_type, 'inc'),
+                    Tuple.typed(IntType, [
+                        Symbol.typed(GET_TYPE, 'get'),
+                        Symbol.typed(rec_type, 'i'),
+                        Symbol('attr'),
+                    ]),
+                ]),
+            ]),
+            {'inc': inc_type,
+             'collection': list_rec_type},
         )
