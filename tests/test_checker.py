@@ -5,9 +5,9 @@ except ImportError:
     from mock import patch
 
 from kinko.nodes import Tuple, Symbol, Number, Node, Keyword, List, Placeholder
-from kinko.types import Func, IntType, NamedArg, Quoted, VarArgs, TypeVar, Union
-from kinko.types import TypingMetaBase, RecordType, ListType
-from kinko.checker import check, split_args, unsplit_args, KinkoTypeError
+from kinko.types import Func, IntType, StringType, NamedArg, Quoted, VarArgs
+from kinko.types import TypeVar, TypingMetaBase, RecordType, ListType, Union
+from kinko.checker import check, split_args, unsplit_args, KinkoTypeError, unify
 
 from .test_parser import node_eq, node_ne, ParseMixin
 
@@ -78,7 +78,27 @@ class TestChecker(ParseMixin, TestCase):
         with self.assertRaises(TypeError):
             split_args([Number(1), Keyword('foo')])
 
-    def testSimple(self):
+    def testUnify(self):
+        unify(IntType, IntType)
+
+        with self.assertRaises(KinkoTypeError):
+            unify(IntType, StringType)
+
+        v1 = TypeVar[None]
+        unify(v1, IntType)
+        self.assertEqual(v1.__instance__, IntType)
+
+        with self.assertRaises(KinkoTypeError):
+            unify(TypeVar[IntType], StringType)
+
+        r1 = RecordType[{'attr1': IntType}]
+        unify(r1, RecordType[{'attr2': IntType}])
+        self.assertEqual(r1, RecordType[{'attr1': IntType, 'attr2': IntType}])
+
+        with self.assertRaises(KinkoTypeError):
+            unify(RecordType[{'a': IntType}], RecordType[{'a': StringType}])
+
+    def testFunc(self):
         inc_type = Func[[IntType], IntType]
         self.assertChecks(
             'inc 1',
@@ -97,6 +117,19 @@ class TestChecker(ParseMixin, TestCase):
         )
         with self.assertRaises(KinkoTypeError):
             check(self.parse_expr('inc "foo"'), {'inc': inc_type})
+
+    def testEnvVar(self):
+        inc_type = Func[[IntType], IntType]
+        self.assertChecks(
+            """
+            inc var
+            """,
+            Tuple.typed(IntType, [
+                Symbol.typed(inc_type, 'inc'),
+                Symbol.typed(IntType, 'var'),
+            ]),
+            {'inc': inc_type, 'var': IntType},
+        )
 
     def testLet(self):
         inc_type = Func[[IntType], IntType]
@@ -136,13 +169,31 @@ class TestChecker(ParseMixin, TestCase):
         )
 
     def testRecord(self):
-        data_type = RecordType[{'attr': TypeVar[IntType]}]
         inc_type = Func[[IntType], IntType]
-        foo_type = Func[[NamedArg['arg', data_type]], IntType]
+        bar_type = RecordType[{'baz': IntType}]
+        self.assertChecks(
+            """
+            inc bar.baz
+            """,
+            Tuple.typed(IntType, [
+                Symbol.typed(inc_type, 'inc'),
+                Tuple.typed(IntType, [
+                    Symbol.typed(GET_TYPE, 'get'),
+                    Symbol.typed(bar_type, 'bar'),
+                    Symbol('baz'),
+                ]),
+            ]),
+            {'inc': inc_type, 'bar': bar_type},
+        )
+
+    def testRecordInfer(self):
+        bar_type = RecordType[{'baz': TypeVar[IntType]}]
+        inc_type = Func[[IntType], IntType]
+        foo_type = Func[[NamedArg['bar', bar_type]], IntType]
         self.assertChecks(
             """
             def foo
-              inc #arg.attr
+              inc #bar.baz
             """,
             Tuple.typed(foo_type, [
                 Symbol.typed(DEF_TYPE, 'def'),
@@ -151,61 +202,12 @@ class TestChecker(ParseMixin, TestCase):
                     Symbol.typed(inc_type, 'inc'),
                     Tuple.typed(TypeVar[IntType], [
                         Symbol.typed(GET_TYPE, 'get'),
-                        Placeholder.typed(TypeVar[data_type], 'arg'),
-                        Symbol('attr'),
+                        Placeholder.typed(TypeVar[bar_type], 'bar'),
+                        Symbol('baz'),
                     ]),
                 ])
             ]),
             {'inc': inc_type},
-        )
-
-    def testRecordUnify(self):
-        data_type = RecordType[{'attr1': TypeVar[IntType],
-                                'attr2': TypeVar[IntType]}]
-        sum_type = Func[[IntType, IntType], IntType]
-        foo_type = Func[[NamedArg['arg', data_type]], IntType]
-        self.assertChecks(
-            """
-            def foo
-              sum #arg.attr1 #arg.attr2
-            """,
-            Tuple.typed(foo_type, [
-                Symbol.typed(DEF_TYPE, 'def'),
-                Symbol('foo'),
-                Tuple.typed(IntType, [
-                    Symbol.typed(sum_type, 'sum'),
-                    Tuple.typed(TypeVar[IntType], [
-                        Symbol.typed(GET_TYPE, 'get'),
-                        Placeholder.typed(TypeVar[data_type], 'arg'),
-                        Symbol('attr1'),
-                    ]),
-                    Tuple.typed(TypeVar[IntType], [
-                        Symbol.typed(GET_TYPE, 'get'),
-                        Placeholder.typed(TypeVar[data_type], 'arg'),
-                        Symbol('attr2'),
-                    ]),
-                ])
-            ]),
-            {'sum': sum_type},
-        )
-
-    def testEnvVar(self):
-        foo_type = Func[[], IntType]
-        inc_type = Func[[IntType], IntType]
-        self.assertChecks(
-            """
-            def foo
-              inc var
-            """,
-            Tuple.typed(foo_type, [
-                Symbol.typed(DEF_TYPE, 'def'),
-                Symbol('foo'),
-                Tuple.typed(IntType, [
-                    Symbol.typed(inc_type, 'inc'),
-                    Symbol.typed(IntType, 'var'),
-                ]),
-            ]),
-            {'inc': inc_type, 'var': IntType},
         )
 
     def testIf(self):
@@ -254,6 +256,5 @@ class TestChecker(ParseMixin, TestCase):
                     ]),
                 ]),
             ]),
-            {'inc': inc_type,
-             'collection': list_rec_type},
+            {'inc': inc_type, 'collection': list_rec_type},
         )
