@@ -6,7 +6,8 @@ except ImportError:
 
 from kinko.nodes import Tuple, Symbol, Number, Node, Keyword, List, Placeholder
 from kinko.types import Func, IntType, StringType, NamedArg, Quoted, VarArgs
-from kinko.types import TypeVar, TypingMetaBase, RecordType, ListType, Union
+from kinko.types import TypeVar, GenericMeta, RecordType, ListType, Union
+from kinko.types import Generic, DictType
 from kinko.checker import check, split_args, unsplit_args, KinkoTypeError, unify
 
 from .test_parser import node_eq, node_ne, ParseMixin
@@ -32,7 +33,7 @@ LET_TYPE = Func[[Quoted, VarArgs[Quoted]], TypeVar[None]]
 DEF_TYPE = Func[[Quoted, VarArgs[Quoted]], TypeVar[None]]
 GET_TYPE = Func[[Quoted, Quoted], TypeVar[None]]
 IF_TYPE = Func[[Quoted, Quoted, Quoted], TypeVar[None]]
-EACH_TYPE = Func[[Quoted, ListType[None], VarArgs[Quoted]], TypeVar[None]]
+EACH_TYPE = Func[[Quoted, ListType[Generic], VarArgs[Quoted]], TypeVar[None]]
 
 
 class TestChecker(ParseMixin, TestCase):
@@ -50,7 +51,7 @@ class TestChecker(ParseMixin, TestCase):
     def setUp(self):
         self.node_patcher = patch.multiple(Node, __eq__=node_eq, __ne__=node_ne)
         self.node_patcher.start()
-        self.type_patcher = patch.multiple(TypingMetaBase,
+        self.type_patcher = patch.multiple(GenericMeta,
                                            __eq__=type_eq, __ne__=type_ne)
         self.type_patcher.start()
 
@@ -97,6 +98,15 @@ class TestChecker(ParseMixin, TestCase):
 
         with self.assertRaises(KinkoTypeError):
             unify(RecordType[{'a': IntType}], RecordType[{'a': StringType}])
+
+        l1 = ListType[TypeVar[None]]
+        unify(l1, ListType[IntType])
+        self.assertEqual(l1.__item_type__.__instance__, IntType)
+
+        d1 = DictType[TypeVar[None], TypeVar[None]]
+        unify(d1, DictType[StringType, IntType])
+        self.assertEqual(d1.__key_type__.__instance__, StringType)
+        self.assertEqual(d1.__value_type__.__instance__, IntType)
 
     def testFunc(self):
         inc_type = Func[[IntType], IntType]

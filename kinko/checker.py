@@ -4,7 +4,7 @@ from .nodes import Tuple, Number, Keyword, String, List, Symbol, Placeholder
 from .nodes import NodeVisitor
 from .types import IntType, NamedArgMeta, StringType, ListType, VarArgsMeta
 from .types import QuotedMeta, TypeVarMeta, TypeVar, Func, NamedArg, RecordType
-from .types import RecordTypeMeta, BoolType, Union
+from .types import RecordTypeMeta, BoolType, Union, ListTypeMeta, DictTypeMeta
 
 
 class KinkoTypeError(TypeError):
@@ -65,11 +65,7 @@ def unify(t1, t2):
     elif isinstance(t2, TypeVarMeta) and t2.__instance__ is None:
         pass
     else:
-        if (
-            type(t1) is not type(t2) and not
-            # FIXME: replace this hack
-            (t2 is BoolType and t1 in {StringType, IntType})
-        ):
+        if not isinstance(t1, type(t2)):
             raise KinkoTypeError('Unexpected type: {!r}, instead of: {!r}'
                                  .format(t1, t2))
 
@@ -79,6 +75,11 @@ def unify(t1, t2):
                     unify(t1.__items__[key], value)
                 else:
                     t1.__items__[key] = value
+        elif isinstance(t1, ListTypeMeta):
+            unify(t1.__item_type__, t2.__item_type__)
+        elif isinstance(t1, DictTypeMeta):
+            unify(t1.__key_type__, t2.__key_type__)
+            unify(t1.__value_type__, t2.__value_type__)
 
 
 def check_arg(arg, type_, env):

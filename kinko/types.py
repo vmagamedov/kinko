@@ -1,33 +1,41 @@
 from .compat import with_metaclass
 
 
-class TypingMetaBase(type):
+class GenericMeta(type):
 
     def __repr__(cls):
         return cls.__name__
 
 
-def _type_base():
-    return TypingMetaBase('T', (TypingMetaBase,), {})
-
-
-class BoolType(with_metaclass(_type_base(), object)):
+class Generic(with_metaclass(GenericMeta, object)):
     pass
 
 
-class StringType(with_metaclass(_type_base(), object)):
+def _subclass(*types):
+    return type('T', tuple(types), {})
+
+
+class BoolTypeMeta(GenericMeta):
     pass
 
 
-class IntType(with_metaclass(_type_base(), object)):
+class BoolType(with_metaclass(BoolTypeMeta, object)):
     pass
 
 
-class OutputType(with_metaclass(_type_base(), object)):
+class StringType(with_metaclass(_subclass(BoolTypeMeta), object)):
     pass
 
 
-class TypingMeta(TypingMetaBase):
+class IntType(with_metaclass(_subclass(BoolTypeMeta), object)):
+    pass
+
+
+class OutputType(with_metaclass(_subclass(GenericMeta), object)):
+    pass
+
+
+class TypingMeta(GenericMeta):
 
     def __cls_init__(cls, *args):
         raise NotImplementedError
