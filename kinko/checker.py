@@ -62,8 +62,8 @@ def unify(t1, t2):
             t1.__instance__ = t2
         else:
             unify(t1.__instance__, t2)
-    elif isinstance(t2, TypeVarMeta) and t2.__instance__ is None:
-        pass
+    elif isinstance(t2, TypeVarMeta):
+        unify(t2, t1)
     else:
         if not isinstance(t1, type(t2)):
             raise KinkoTypeError('Unexpected type: {!r}, instead of: {!r}'
@@ -171,9 +171,14 @@ def check(node, env):
             obj, attr = pos_args
             obj = check(obj, env)
             assert isinstance(attr, Symbol)
-            unify(obj.__type__, RecordType[{attr.name: TypeVar[None]}])
+            if isinstance(obj.__type__, TypeVarMeta):
+                unify(obj.__type__, RecordType[{attr.name: TypeVar[None]}])
             pos_args = obj, attr
-            result_type = get_type(obj).__items__[attr.name]
+            try:
+                result_type = get_type(obj).__items__[attr.name]
+            except KeyError:
+                raise KinkoTypeError('Trying to get unknown record '
+                                     'attribute: "{}"'.format(attr.name))
 
         elif sym.name == 'if':
             expr, then_, else_ = pos_args

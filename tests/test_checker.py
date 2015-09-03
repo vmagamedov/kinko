@@ -31,7 +31,7 @@ def type_ne(self, other):
 
 LET_TYPE = Func[[Quoted, VarArgs[Quoted]], TypeVar[None]]
 DEF_TYPE = Func[[Quoted, VarArgs[Quoted]], TypeVar[None]]
-GET_TYPE = Func[[Quoted, Quoted], TypeVar[None]]
+GET_TYPE = Func[[RecordType[{}], Quoted], TypeVar[None]]
 IF_TYPE = Func[[Quoted, Quoted, Quoted], TypeVar[None]]
 EACH_TYPE = Func[[Quoted, ListType[Generic], VarArgs[Quoted]], TypeVar[None]]
 
@@ -59,9 +59,12 @@ class TestChecker(ParseMixin, TestCase):
         self.type_patcher.stop()
         self.node_patcher.stop()
 
-    def assertChecks(self, src, typed, extra_env=None):
+    def check(self, src, extra_env=None):
         env = dict(self.default_env, **(extra_env or {}))
-        self.assertEqual(check(self.parse_expr(src), env), typed)
+        return check(self.parse_expr(src), env)
+
+    def assertChecks(self, src, typed, extra_env=None):
+        self.assertEqual(self.check(src, extra_env), typed)
 
     def testSplitArgs(self):
         self.assertEqual(
@@ -79,34 +82,42 @@ class TestChecker(ParseMixin, TestCase):
         with self.assertRaises(TypeError):
             split_args([Number(1), Keyword('foo')])
 
-    def testUnify(self):
+    def testUnifyType(self):
         unify(IntType, IntType)
 
         with self.assertRaises(KinkoTypeError):
             unify(IntType, StringType)
 
-        v1 = TypeVar[None]
-        unify(v1, IntType)
-        self.assertEqual(v1.__instance__, IntType)
+    def testUnifyTypeVar(self):
+        a = TypeVar[None]
+        unify(a, IntType)
+        self.assertEqual(a.__instance__, IntType)
+
+        b = TypeVar[None]
+        unify(IntType, b)
+        self.assertEqual(b.__instance__, IntType)
 
         with self.assertRaises(KinkoTypeError):
             unify(TypeVar[IntType], StringType)
 
-        r1 = RecordType[{'attr1': IntType}]
-        unify(r1, RecordType[{'attr2': IntType}])
-        self.assertEqual(r1, RecordType[{'attr1': IntType, 'attr2': IntType}])
+    def testUnifyRecordType(self):
+        rec_type = RecordType[{'a': IntType}]
+        unify(rec_type, RecordType[{'b': IntType}])
+        self.assertEqual(rec_type, RecordType[{'a': IntType, 'b': IntType}])
 
         with self.assertRaises(KinkoTypeError):
             unify(RecordType[{'a': IntType}], RecordType[{'a': StringType}])
 
-        l1 = ListType[TypeVar[None]]
-        unify(l1, ListType[IntType])
-        self.assertEqual(l1.__item_type__.__instance__, IntType)
+    def testUnifyListType(self):
+        list_type = ListType[TypeVar[None]]
+        unify(list_type, ListType[IntType])
+        self.assertEqual(list_type.__item_type__.__instance__, IntType)
 
-        d1 = DictType[TypeVar[None], TypeVar[None]]
-        unify(d1, DictType[StringType, IntType])
-        self.assertEqual(d1.__key_type__.__instance__, StringType)
-        self.assertEqual(d1.__value_type__.__instance__, IntType)
+    def testUnifyDictType(self):
+        dict_type = DictType[TypeVar[None], TypeVar[None]]
+        unify(dict_type, DictType[StringType, IntType])
+        self.assertEqual(dict_type.__key_type__.__instance__, StringType)
+        self.assertEqual(dict_type.__value_type__.__instance__, IntType)
 
     def testFunc(self):
         inc_type = Func[[IntType], IntType]
@@ -126,7 +137,7 @@ class TestChecker(ParseMixin, TestCase):
             {'inc-step': inc_step_type},
         )
         with self.assertRaises(KinkoTypeError):
-            check(self.parse_expr('inc "foo"'), {'inc': inc_type})
+            self.check('inc "foo"', {'inc': inc_type})
 
     def testEnvVar(self):
         inc_type = Func[[IntType], IntType]
@@ -195,6 +206,9 @@ class TestChecker(ParseMixin, TestCase):
             ]),
             {'inc': inc_type, 'bar': bar_type},
         )
+        with self.assertRaises(KinkoTypeError):
+            self.check('inc bar.unknown',
+                       {'inc': inc_type, 'bar': bar_type})
 
     def testRecordInfer(self):
         bar_type = RecordType[{'baz': TypeVar[IntType]}]
