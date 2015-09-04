@@ -5,6 +5,7 @@ from .nodes import NodeVisitor
 from .types import IntType, NamedArgMeta, StringType, ListType, VarArgsMeta
 from .types import QuotedMeta, TypeVarMeta, TypeVar, Func, NamedArg, RecordType
 from .types import RecordTypeMeta, BoolType, Union, ListTypeMeta, DictTypeMeta
+from .types import TypingMeta, UnionMeta
 
 
 class KinkoTypeError(TypeError):
@@ -65,21 +66,47 @@ def unify(t1, t2):
     elif isinstance(t2, TypeVarMeta):
         unify(t2, t1)
     else:
-        if not isinstance(t1, type(t2)):
-            raise KinkoTypeError('Unexpected type: {!r}, instead of: {!r}'
-                                 .format(t1, t2))
-
-        if isinstance(t1, RecordTypeMeta) and isinstance(t2, RecordTypeMeta):
-            for key, value in t2.__items__.items():
-                if key in t1.__items__:
-                    unify(t1.__items__[key], value)
+        if isinstance(t1, UnionMeta):
+            for t in t1.__types__:
+                unify(t, t2)
+            return
+        elif isinstance(t2, UnionMeta):
+            for t in t2.__types__:
+                try:
+                    unify(t1, t)
+                except KinkoTypeError:
+                    continue
                 else:
-                    t1.__items__[key] = value
-        elif isinstance(t1, ListTypeMeta):
-            unify(t1.__item_type__, t2.__item_type__)
-        elif isinstance(t1, DictTypeMeta):
-            unify(t1.__key_type__, t2.__key_type__)
-            unify(t1.__value_type__, t2.__value_type__)
+                    return
+            # not unified
+        else:
+            if isinstance(t1, type(t2)):
+                if isinstance(t1, RecordTypeMeta):
+                    if isinstance(t2, RecordTypeMeta):
+                        for key, value in t2.__items__.items():
+                            if key in t1.__items__:
+                                unify(t1.__items__[key], value)
+                            else:
+                                t1.__items__[key] = value
+                    return
+
+                elif isinstance(t1, ListTypeMeta):
+                    if isinstance(t2, ListTypeMeta):
+                        unify(t1.__item_type__, t2.__item_type__)
+                    return
+
+                elif isinstance(t1, DictTypeMeta):
+                    if isinstance(t2, DictTypeMeta):
+                        unify(t1.__key_type__, t2.__key_type__)
+                        unify(t1.__value_type__, t2.__value_type__)
+                    return
+
+                if not isinstance(t1, TypingMeta):
+                    # means simple type with nullary constructor
+                    return
+
+        raise KinkoTypeError('Unexpected type: {!r}, instead of: {!r}'
+                             .format(t1, t2))
 
 
 def check_arg(arg, type_, env):
@@ -219,6 +246,8 @@ def check(node, env):
         return Number.typed(IntType, node.value)
 
     elif isinstance(node, List):
-        return List.typed(ListType, node.values)
+        values = [check(v, env) for v in node.values]
+        return List.typed(ListType[Union[(v.__type__ for v in values)]],
+                          values)
 
     raise NotImplementedError(repr(node))

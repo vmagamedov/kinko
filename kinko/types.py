@@ -62,7 +62,7 @@ class TypeVar(with_metaclass(TypeVarMeta, object)):
 class UnionMeta(TypingMeta):
 
     def __cls_init__(cls, types):
-        cls.__types__ = (types,) if not isinstance(types, tuple) else types
+        cls.__types__ = set(types)
 
     def __repr__(cls):
         return '{}[{}]'.format(cls.__name__,
@@ -157,7 +157,7 @@ class DictType(with_metaclass(DictTypeMeta, object)):
 class RecordTypeMeta(TypingMeta):
 
     def __cls_init__(cls, items):
-        cls.__items__ = items.copy()
+        cls.__items__ = dict(items)
 
     def __repr__(cls):
         return '{}[{!r}]'.format(cls.__name__, cls.__items__)

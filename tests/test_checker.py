@@ -5,6 +5,7 @@ except ImportError:
     from mock import patch
 
 from kinko.nodes import Tuple, Symbol, Number, Node, Keyword, List, Placeholder
+from kinko.nodes import String
 from kinko.types import Func, IntType, StringType, NamedArg, Quoted, VarArgs
 from kinko.types import TypeVar, GenericMeta, RecordType, ListType, Union
 from kinko.types import Generic, DictType
@@ -99,6 +100,14 @@ class TestChecker(ParseMixin, TestCase):
 
         with self.assertRaises(KinkoTypeError):
             unify(TypeVar[IntType], StringType)
+
+    def testUnifyUnion(self):
+        a = Union[StringType, IntType]
+        unify(a, a)
+        with self.assertRaises(KinkoTypeError):
+            unify(a, StringType)
+        unify(IntType, a)
+        unify(StringType, a)
 
     def testUnifyRecordType(self):
         rec_type = RecordType[{'a': IntType}]
@@ -282,3 +291,37 @@ class TestChecker(ParseMixin, TestCase):
             ]),
             {'inc': inc_type, 'collection': list_rec_type},
         )
+
+    def testList(self):
+        foo_type = Func[[ListType[Union[IntType, StringType]]], IntType]
+        self.assertChecks(
+            """
+            foo [1 2 3]
+            """,
+            Tuple.typed(IntType, [
+                Symbol.typed(foo_type, 'foo'),
+                List.typed(ListType[Union[IntType,]], [
+                    Number.typed(IntType, 1),
+                    Number.typed(IntType, 2),
+                    Number.typed(IntType, 3),
+                ]),
+            ]),
+            {'foo': foo_type},
+        )
+        self.assertChecks(
+            """
+            foo [1 2 "3"]
+            """,
+            Tuple.typed(IntType, [
+                Symbol.typed(foo_type, 'foo'),
+                List.typed(ListType[Union[IntType, StringType]], [
+                    Number.typed(IntType, 1),
+                    Number.typed(IntType, 2),
+                    String.typed(StringType, '3'),
+                ]),
+            ]),
+            {'foo': foo_type},
+        )
+        with self.assertRaises(KinkoTypeError):
+            self.check('foo [1 2 "3"]',
+                       {'foo': Func[[ListType[IntType]], IntType]})
