@@ -5,7 +5,7 @@ from .nodes import NodeVisitor
 from .types import IntType, NamedArgMeta, StringType, ListType, VarArgsMeta
 from .types import QuotedMeta, TypeVarMeta, TypeVar, Func, NamedArg, RecordType
 from .types import RecordTypeMeta, BoolType, Union, ListTypeMeta, DictTypeMeta
-from .types import TypingMeta, UnionMeta
+from .types import TypingMeta, UnionMeta, Nothing
 
 
 class KinkoTypeError(TypeError):
@@ -67,10 +67,12 @@ def unify(t1, t2):
         unify(t2, t1)
     else:
         if isinstance(t1, UnionMeta):
+            # all types from t1 union should unify with t2
             for t in t1.__types__:
                 unify(t, t2)
             return
         elif isinstance(t2, UnionMeta):
+            # t1 should unify with at least one type from t2 union
             for t in t2.__types__:
                 try:
                     unify(t1, t)
@@ -210,8 +212,19 @@ def check(node, env):
         elif sym.name == 'if':
             expr, then_, else_ = pos_args
             expr = check(expr, env)
-            unify(expr.__type__, BoolType)
-            then_ = check(then_, env)
+            if (
+                isinstance(expr, Symbol) and
+                isinstance(expr.__type__, UnionMeta) and
+                Nothing in expr.__type__.__types__
+            ):
+                then_env = env.copy()
+                expr_type = Union[expr.__type__.__types__ - {Nothing}]
+                then_env[expr.name] = expr_type
+            else:
+                then_env = env
+                expr_type = expr.__type__
+            unify(expr_type, BoolType)
+            then_ = check(then_, then_env)
             else_ = check(else_, env)
             pos_args = expr, then_, else_
             result_type = Union[then_.__type__, else_.__type__]

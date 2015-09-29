@@ -23,6 +23,10 @@ class BoolType(with_metaclass(BoolTypeMeta, object)):
     pass
 
 
+class Nothing(with_metaclass(_subclass(BoolTypeMeta), object)):
+    pass
+
+
 class StringType(with_metaclass(_subclass(BoolTypeMeta), object)):
     pass
 
@@ -70,6 +74,16 @@ class UnionMeta(TypingMeta):
 
 
 class Union(with_metaclass(UnionMeta, object)):
+    pass
+
+
+class OptionMeta(UnionMeta):
+
+    def __cls_init__(cls, type_):
+        super(OptionMeta, cls).__cls_init__((type_, Nothing))
+
+
+class Option(with_metaclass(OptionMeta, object)):
     pass
 
 

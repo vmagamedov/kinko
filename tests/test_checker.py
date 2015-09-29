@@ -8,7 +8,7 @@ from kinko.nodes import Tuple, Symbol, Number, Node, Keyword, List, Placeholder
 from kinko.nodes import String
 from kinko.types import Func, IntType, StringType, NamedArg, Quoted, VarArgs
 from kinko.types import TypeVar, GenericMeta, RecordType, ListType, Union
-from kinko.types import Generic, DictType
+from kinko.types import Generic, DictType, Option
 from kinko.checker import check, split_args, unsplit_args, KinkoTypeError, unify
 
 from .test_parser import node_eq, node_ne, ParseMixin
@@ -249,7 +249,7 @@ class TestChecker(ParseMixin, TestCase):
             """
             if (inc 1) (inc 2) (inc 3)
             """,
-            Tuple.typed(Union[IntType, IntType], [
+            Tuple.typed(Union[IntType,], [
                 Symbol.typed(IF_TYPE, 'if'),
                 Tuple.typed(IntType, [
                     Symbol.typed(inc_type, 'inc'),
@@ -266,6 +266,27 @@ class TestChecker(ParseMixin, TestCase):
             ]),
             {'inc': inc_type},
         )
+
+    def testIfOptional(self):
+        inc_type = Func[[IntType], IntType]
+        env = {'inc': inc_type, 'foo': Option[IntType]}
+        self.assertChecks(
+            """
+            if foo (inc foo) 0
+            """,
+            Tuple.typed(Union[IntType, IntType], [
+                Symbol.typed(IF_TYPE, 'if'),
+                Symbol.typed(Option[IntType], 'foo'),
+                Tuple.typed(IntType, [
+                    Symbol.typed(inc_type, 'inc'),
+                    Symbol.typed(Union[IntType,], 'foo'),
+                ]),
+                Number.typed(IntType, 0),
+            ]),
+            env,
+        )
+        with self.assertRaises(KinkoTypeError):
+            self.check('inc foo', env)
 
     def testEach(self):
         inc_type = Func[[IntType], IntType]
