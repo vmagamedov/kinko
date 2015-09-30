@@ -5,7 +5,7 @@ from .nodes import NodeVisitor
 from .types import IntType, NamedArgMeta, StringType, ListType, VarArgsMeta
 from .types import QuotedMeta, TypeVarMeta, TypeVar, Func, NamedArg, RecordType
 from .types import RecordTypeMeta, BoolType, Union, ListTypeMeta, DictTypeMeta
-from .types import TypingMeta, UnionMeta, Nothing
+from .types import TypingMeta, UnionMeta, Nothing, Option
 
 
 class KinkoTypeError(TypeError):
@@ -212,22 +212,31 @@ def check(node, env):
         elif sym.name == 'if':
             expr, then_, else_ = pos_args
             expr = check(expr, env)
-            if (
-                isinstance(expr, Symbol) and
-                isinstance(expr.__type__, UnionMeta) and
-                Nothing in expr.__type__.__types__
-            ):
-                then_env = env.copy()
-                expr_type = Union[expr.__type__.__types__ - {Nothing}]
-                then_env[expr.name] = expr_type
-            else:
-                then_env = env
-                expr_type = expr.__type__
-            unify(expr_type, BoolType)
-            then_ = check(then_, then_env)
+            unify(expr.__type__, BoolType)
+            then_ = check(then_, env)
             else_ = check(else_, env)
             pos_args = expr, then_, else_
             result_type = Union[then_.__type__, else_.__type__]
+
+        elif sym.name == 'if-some':
+            bindings, then_ = pos_args
+            assert isinstance(bindings, List)
+            bind_sym, bind_expr = bindings.values
+            assert isinstance(bind_sym, Symbol)
+            bind_expr = check(bind_expr, env)
+            then_env = env.copy()
+            if (
+                isinstance(bind_expr.__type__, UnionMeta) and
+                Nothing in bind_expr.__type__.__types__
+            ):
+                then_env[bind_sym.name] = \
+                    Union[bind_expr.__type__.__types__ - {Nothing}]
+            else:
+                # TODO: warn that this check is not necessary
+                then_env[bind_sym.name] = bind_expr.__type__
+            then_ = check(then_, then_env)
+            pos_args = List([bind_sym, bind_expr]), then_
+            result_type = Option[then_.__type__]
 
         elif sym.name == 'each':
             item_sym, item_col, each_body = pos_args

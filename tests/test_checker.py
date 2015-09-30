@@ -35,6 +35,7 @@ DEF_TYPE = Func[[Quoted, VarArgs[Quoted]], TypeVar[None]]
 GET_TYPE = Func[[RecordType[{}], Quoted], TypeVar[None]]
 IF_TYPE = Func[[Quoted, Quoted, Quoted], TypeVar[None]]
 EACH_TYPE = Func[[Quoted, ListType[Generic], VarArgs[Quoted]], TypeVar[None]]
+IF_SOME_TYPE = Func[[Quoted, Quoted], TypeVar[None]]
 
 
 class TestChecker(ParseMixin, TestCase):
@@ -44,6 +45,7 @@ class TestChecker(ParseMixin, TestCase):
         'get': GET_TYPE,
         'if': IF_TYPE,
         'each': EACH_TYPE,
+        'if-some': IF_SOME_TYPE,
     }
 
     def parse_expr(self, src):
@@ -267,26 +269,33 @@ class TestChecker(ParseMixin, TestCase):
             {'inc': inc_type},
         )
 
-    def testIfOptional(self):
+    def testIfSome(self):
         inc_type = Func[[IntType], IntType]
-        env = {'inc': inc_type, 'foo': Option[IntType]}
+        foo_type = RecordType[{'bar': Option[IntType]}]
+        env = {'inc': inc_type, 'foo': foo_type}
         self.assertChecks(
             """
-            if foo (inc foo) 0
+            if-some [x foo.bar] (inc x)
             """,
-            Tuple.typed(Union[IntType, IntType], [
-                Symbol.typed(IF_TYPE, 'if'),
-                Symbol.typed(Option[IntType], 'foo'),
+            Tuple.typed(Option[IntType], [
+                Symbol.typed(IF_SOME_TYPE, 'if-some'),
+                List([
+                    Symbol('x'),
+                    Tuple.typed(Option[IntType], [
+                        Symbol.typed(GET_TYPE, 'get'),
+                        Symbol.typed(foo_type, 'foo'),
+                        Symbol('bar'),
+                    ]),
+                ]),
                 Tuple.typed(IntType, [
                     Symbol.typed(inc_type, 'inc'),
-                    Symbol.typed(Union[IntType,], 'foo'),
+                    Symbol.typed(Union[IntType,], 'x'),
                 ]),
-                Number.typed(IntType, 0),
             ]),
             env,
         )
         with self.assertRaises(KinkoTypeError):
-            self.check('inc foo', env)
+            self.check('inc foo.bar', env)
 
     def testEach(self):
         inc_type = Func[[IntType], IntType]
