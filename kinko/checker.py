@@ -5,7 +5,18 @@ from .nodes import NodeVisitor
 from .types import IntType, NamedArgMeta, StringType, ListType, VarArgsMeta
 from .types import QuotedMeta, TypeVarMeta, TypeVar, Func, NamedArg, RecordType
 from .types import RecordTypeMeta, BoolType, Union, ListTypeMeta, DictTypeMeta
-from .types import TypingMeta, UnionMeta, Nothing, Option
+from .types import TypingMeta, UnionMeta, Nothing, Option, Quoted, VarArgs
+from .types import Generic
+
+
+BUILTINS = {
+    'let': Func[[Quoted, VarArgs[Quoted]], TypeVar[None]],
+    'def': Func[[Quoted, VarArgs[Quoted]], TypeVar[None]],
+    'get': Func[[RecordType[{}], Quoted], TypeVar[None]],
+    'if': Func[[Quoted, Quoted, Quoted], TypeVar[None]],
+    'each': Func[[Quoted, ListType[Generic], VarArgs[Quoted]], TypeVar[None]],
+    'if-some': Func[[Quoted, Quoted], TypeVar[None]],
+}
 
 
 class KinkoTypeError(TypeError):
@@ -161,7 +172,7 @@ def check(node, env):
         sym, args = node.values[0], node.values[1:]
         pos_args, kw_args = split_args(args)
 
-        fn_type = env[sym.name]
+        fn_type = env.get(sym.name) or BUILTINS[sym.name]
         sym = Symbol.typed(fn_type, sym.name)
         pos_args, kw_args = check_args(pos_args, kw_args,
                                        fn_type, env)

@@ -6,10 +6,10 @@ except ImportError:
 
 from kinko.nodes import Tuple, Symbol, Number, Node, Keyword, List, Placeholder
 from kinko.nodes import String
-from kinko.types import Func, IntType, StringType, NamedArg, Quoted, VarArgs
-from kinko.types import TypeVar, GenericMeta, RecordType, ListType, Union
-from kinko.types import Generic, DictType, Option
+from kinko.types import Func, IntType, StringType, NamedArg, TypeVar, GenericMeta
+from kinko.types import RecordType, ListType, Union, DictType, Option
 from kinko.checker import check, split_args, unsplit_args, KinkoTypeError, unify
+from kinko.checker import BUILTINS
 
 from .test_parser import node_eq, node_ne, ParseMixin
 
@@ -30,23 +30,15 @@ def type_ne(self, other):
     return not self.__eq__(other)
 
 
-LET_TYPE = Func[[Quoted, VarArgs[Quoted]], TypeVar[None]]
-DEF_TYPE = Func[[Quoted, VarArgs[Quoted]], TypeVar[None]]
-GET_TYPE = Func[[RecordType[{}], Quoted], TypeVar[None]]
-IF_TYPE = Func[[Quoted, Quoted, Quoted], TypeVar[None]]
-EACH_TYPE = Func[[Quoted, ListType[Generic], VarArgs[Quoted]], TypeVar[None]]
-IF_SOME_TYPE = Func[[Quoted, Quoted], TypeVar[None]]
+LET_TYPE = BUILTINS['let']
+DEF_TYPE = BUILTINS['def']
+GET_TYPE = BUILTINS['get']
+IF_TYPE = BUILTINS['if']
+EACH_TYPE = BUILTINS['each']
+IF_SOME_TYPE = BUILTINS['if-some']
 
 
 class TestChecker(ParseMixin, TestCase):
-    default_env = {
-        'let': LET_TYPE,
-        'def': DEF_TYPE,
-        'get': GET_TYPE,
-        'if': IF_TYPE,
-        'each': EACH_TYPE,
-        'if-some': IF_SOME_TYPE,
-    }
 
     def parse_expr(self, src):
         return self.parse(src).values[0]
@@ -62,9 +54,8 @@ class TestChecker(ParseMixin, TestCase):
         self.type_patcher.stop()
         self.node_patcher.stop()
 
-    def check(self, src, extra_env=None):
-        env = dict(self.default_env, **(extra_env or {}))
-        return check(self.parse_expr(src), env)
+    def check(self, src, env=None):
+        return check(self.parse_expr(src), env or {})
 
     def assertChecks(self, src, typed, extra_env=None):
         self.assertEqual(self.check(src, extra_env), typed)
