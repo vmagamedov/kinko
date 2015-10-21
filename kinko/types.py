@@ -6,36 +6,57 @@ class GenericMeta(type):
     def __repr__(cls):
         return cls.__name__
 
-
-class Generic(with_metaclass(GenericMeta, object)):
-    pass
-
-
-def _subclass(*types):
-    return type('T', tuple(types), {})
+    def accept(self, visitor):
+        raise NotImplementedError
 
 
 class BoolTypeMeta(GenericMeta):
-    pass
+
+    def accept(cls, visitor):
+        return visitor.visit_bool(cls)
 
 
 class BoolType(with_metaclass(BoolTypeMeta, object)):
     pass
 
 
-class Nothing(with_metaclass(_subclass(BoolTypeMeta), object)):
+class NothingMeta(BoolTypeMeta):
+
+    def accept(cls, visitor):
+        return visitor.visit_nothing(cls)
+
+
+class Nothing(with_metaclass(NothingMeta, object)):
     pass
 
 
-class StringType(with_metaclass(_subclass(BoolTypeMeta), object)):
+class StringTypeMeta(BoolTypeMeta):
+
+    def accept(cls, visitor):
+        return visitor.visit_string(cls)
+
+
+class StringType(with_metaclass(StringTypeMeta, object)):
     pass
 
 
-class IntType(with_metaclass(_subclass(BoolTypeMeta), object)):
+class IntTypeMeta(BoolTypeMeta):
+
+    def accept(cls, visitor):
+        return visitor.visit_int(cls)
+
+
+class IntType(with_metaclass(IntTypeMeta, object)):
     pass
 
 
-class OutputType(with_metaclass(_subclass(GenericMeta), object)):
+class OutputTypeMeta(GenericMeta):
+
+    def accept(cls, visitor):
+        return visitor.visit_output(cls)
+
+
+class OutputType(with_metaclass(OutputTypeMeta, object)):
     pass
 
 
@@ -58,6 +79,9 @@ class TypeVarMeta(TypingMeta):
     def __repr__(cls):
         return '{}[{!r}]'.format(cls.__name__, cls.__instance__)
 
+    def accept(cls, visitor):
+        return visitor.visit_typevar(cls)
+
 
 class TypeVar(with_metaclass(TypeVarMeta, object)):
     pass
@@ -72,6 +96,9 @@ class UnionMeta(TypingMeta):
         return '{}[{}]'.format(cls.__name__,
                                '|'.join(map(repr, cls.__types__)))
 
+    def accept(cls, visitor):
+        return visitor.visit_union(cls)
+
 
 class Union(with_metaclass(UnionMeta, object)):
     pass
@@ -81,6 +108,13 @@ class OptionMeta(UnionMeta):
 
     def __cls_init__(cls, type_):
         super(OptionMeta, cls).__cls_init__((type_, Nothing))
+
+    def __repr__(cls):
+        type_ = (cls.__types__ - {Nothing}).pop()
+        return '{}[{!r}]'.format(cls.__name__, type_)
+
+    def accept(cls, visitor):
+        return visitor.visit_option(cls)
 
 
 class Option(with_metaclass(OptionMeta, object)):
@@ -96,6 +130,9 @@ class FuncMeta(TypingMeta):
         return '{}[{!r}, {!r}]'.format(cls.__name__, cls.__args__,
                                        cls.__result__)
 
+    def accept(cls, visitor):
+        return visitor.visit_func(cls)
+
 
 class Func(with_metaclass(FuncMeta, object)):
     pass
@@ -108,6 +145,9 @@ class VarArgsMeta(TypingMeta):
 
     def __repr__(cls):
         return '{}[{!r}]'.format(cls.__name__, cls.__arg_type__)
+
+    def accept(cls, visitor):
+        return visitor.visit_varargs(cls)
 
 
 class VarArgs(with_metaclass(VarArgsMeta, object)):
@@ -123,21 +163,11 @@ class NamedArgMeta(TypingMeta):
         return '{}[{}={!r}]'.format(cls.__name__, cls.__arg_name__,
                                     cls.__arg_type__)
 
+    def accept(cls, visitor):
+        return visitor.visit_namedarg(cls)
+
 
 class NamedArg(with_metaclass(NamedArgMeta, object)):
-    pass
-
-
-class QuotedMeta(TypingMeta):
-
-    def __cls_init__(cls, arg_type):
-        cls.__arg_type__ = arg_type
-
-    def __repr__(cls):
-        return '{}[{!r}]'.format(cls.__name__, cls.__arg_type__)
-
-
-class Quoted(with_metaclass(QuotedMeta, object)):
     pass
 
 
@@ -148,6 +178,9 @@ class ListTypeMeta(TypingMeta):
 
     def __repr__(cls):
         return '{}[{!r}]'.format(cls.__name__, cls.__item_type__)
+
+    def accept(cls, visitor):
+        return visitor.visit_list(cls)
 
 
 class ListType(with_metaclass(ListTypeMeta, object)):
@@ -163,6 +196,9 @@ class DictTypeMeta(TypingMeta):
         return '{}[{!r}={!r}]'.format(cls.__name__, cls.__key_type__,
                                       cls.__value_type__)
 
+    def accept(cls, visitor):
+        return visitor.visit_dict(cls)
+
 
 class DictType(with_metaclass(DictTypeMeta, object)):
     pass
@@ -176,6 +212,62 @@ class RecordTypeMeta(TypingMeta):
     def __repr__(cls):
         return '{}[{!r}]'.format(cls.__name__, cls.__items__)
 
+    def accept(cls, visitor):
+        return visitor.visit_record(cls)
+
 
 class RecordType(with_metaclass(RecordTypeMeta, object)):
     pass
+
+
+class TypeTransformer(object):
+
+    def visit(self, type_):
+        return type_.accept(self)
+
+    def visit_bool(self, type_):
+        return type_
+
+    def visit_nothing(self, type_):
+        return type_
+
+    def visit_string(self, type_):
+        return type_
+
+    def visit_int(self, type_):
+        return type_
+
+    def visit_output(self, type_):
+        return type_
+
+    def visit_typevar(self, type_):
+        return TypeVar[self.visit(type_.__instance__)
+                       if type_.__instance__ is not None else None]
+
+    def visit_union(self, type_):
+        return Union[(self.visit(t) for t in type_.__types__)]
+
+    def visit_option(self, type_):
+        t = (type_.__types__ - {Nothing}).pop()
+        return Option[self.visit(t)]
+
+    def visit_func(self, type_):
+        return Func[[self.visit(t) for t in type_.__args__],
+                    self.visit(type_.__result__)]
+
+    def visit_varargs(self, type_):
+        return VarArgs[self.visit(type_.__arg_type__)]
+
+    def visit_namedarg(self, type_):
+        return NamedArg[type_.__arg_name__, self.visit(type_.__arg_type__)]
+
+    def visit_list(self, type_):
+        return ListType[self.visit(type_.__item_type__)]
+
+    def visit_dict(self, type_):
+        return DictType[self.visit(type_.__key_type__),
+                        self.visit(type_.__value_type__)]
+
+    def visit_record(self, type_):
+        return RecordType[{key: self.visit(value)
+                           for key, value in type_.__items__.items()}]

@@ -9,7 +9,8 @@ from kinko.nodes import String
 from kinko.types import Func, IntType, StringType, NamedArg, TypeVar, GenericMeta
 from kinko.types import RecordType, ListType, Union, DictType, Option
 from kinko.checker import check, split_args, unsplit_args, KinkoTypeError, unify
-from kinko.checker import BUILTINS
+from kinko.checker import LET_TYPE, DEF_TYPE, GET_TYPE, IF2_TYPE, IF_SOME1_TYPE
+from kinko.checker import EACH_TYPE
 
 from .test_parser import node_eq, node_ne, ParseMixin
 
@@ -28,14 +29,6 @@ def type_eq(self, other):
 
 def type_ne(self, other):
     return not self.__eq__(other)
-
-
-LET_TYPE = BUILTINS['let']
-DEF_TYPE = BUILTINS['def']
-GET_TYPE = BUILTINS['get']
-IF_TYPE = BUILTINS['if']
-EACH_TYPE = BUILTINS['each']
-IF_SOME_TYPE = BUILTINS['if-some']
 
 
 class TestChecker(ParseMixin, TestCase):
@@ -158,7 +151,7 @@ class TestChecker(ParseMixin, TestCase):
         inc_type = Func[[IntType], IntType]
         self.assertChecks(
             'let [x 1] (inc x)',
-            Tuple.typed(IntType, [
+            Tuple.typed(TypeVar[IntType], [
                 Symbol.typed(LET_TYPE, 'let'),
                 List([
                     Symbol.typed(IntType, 'x'),
@@ -180,7 +173,7 @@ class TestChecker(ParseMixin, TestCase):
             def foo
               inc #arg
             """,
-            Tuple.typed(foo_type, [
+            Tuple.typed(TypeVar[foo_type], [
                 Symbol.typed(DEF_TYPE, 'def'),
                 Symbol('foo'),
                 Tuple.typed(IntType, [
@@ -200,7 +193,7 @@ class TestChecker(ParseMixin, TestCase):
             """,
             Tuple.typed(IntType, [
                 Symbol.typed(inc_type, 'inc'),
-                Tuple.typed(IntType, [
+                Tuple.typed(TypeVar[IntType], [
                     Symbol.typed(GET_TYPE, 'get'),
                     Symbol.typed(bar_type, 'bar'),
                     Symbol('baz'),
@@ -221,12 +214,12 @@ class TestChecker(ParseMixin, TestCase):
             def foo
               inc #bar.baz
             """,
-            Tuple.typed(foo_type, [
+            Tuple.typed(TypeVar[foo_type], [
                 Symbol.typed(DEF_TYPE, 'def'),
                 Symbol('foo'),
                 Tuple.typed(IntType, [
                     Symbol.typed(inc_type, 'inc'),
-                    Tuple.typed(TypeVar[IntType], [
+                    Tuple.typed(TypeVar[TypeVar[IntType]], [
                         Symbol.typed(GET_TYPE, 'get'),
                         Placeholder.typed(TypeVar[bar_type], 'bar'),
                         Symbol('baz'),
@@ -242,8 +235,8 @@ class TestChecker(ParseMixin, TestCase):
             """
             if (inc 1) (inc 2) (inc 3)
             """,
-            Tuple.typed(Union[IntType,], [
-                Symbol.typed(IF_TYPE, 'if'),
+            Tuple.typed(TypeVar[Union[IntType,]], [
+                Symbol.typed(IF2_TYPE, 'if'),
                 Tuple.typed(IntType, [
                     Symbol.typed(inc_type, 'inc'),
                     Number.typed(IntType, 1),
@@ -268,11 +261,11 @@ class TestChecker(ParseMixin, TestCase):
             """
             if-some [x foo.bar] (inc x)
             """,
-            Tuple.typed(Option[IntType], [
-                Symbol.typed(IF_SOME_TYPE, 'if-some'),
+            Tuple.typed(TypeVar[Option[IntType]], [
+                Symbol.typed(IF_SOME1_TYPE, 'if-some'),
                 List([
                     Symbol('x'),
-                    Tuple.typed(Option[IntType], [
+                    Tuple.typed(TypeVar[Option[IntType]], [
                         Symbol.typed(GET_TYPE, 'get'),
                         Symbol.typed(foo_type, 'foo'),
                         Symbol('bar'),
@@ -297,13 +290,13 @@ class TestChecker(ParseMixin, TestCase):
             each i collection
               inc i.attr
             """,
-            Tuple.typed(ListType[IntType], [
+            Tuple.typed(TypeVar[ListType[IntType]], [
                 Symbol.typed(EACH_TYPE, 'each'),
                 Symbol.typed(rec_type, 'i'),
                 Symbol.typed(list_rec_type, 'collection'),
                 Tuple.typed(IntType, [
                     Symbol.typed(inc_type, 'inc'),
-                    Tuple.typed(IntType, [
+                    Tuple.typed(TypeVar[IntType], [
                         Symbol.typed(GET_TYPE, 'get'),
                         Symbol.typed(rec_type, 'i'),
                         Symbol('attr'),

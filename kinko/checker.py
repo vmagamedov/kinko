@@ -3,20 +3,10 @@ from itertools import chain
 from .nodes import Tuple, Number, Keyword, String, List, Symbol, Placeholder
 from .nodes import NodeVisitor
 from .types import IntType, NamedArgMeta, StringType, ListType, VarArgsMeta
-from .types import QuotedMeta, TypeVarMeta, TypeVar, Func, NamedArg, RecordType
+from .types import TypeVarMeta, TypeVar, Func, NamedArg, RecordType
 from .types import RecordTypeMeta, BoolType, Union, ListTypeMeta, DictTypeMeta
-from .types import TypingMeta, UnionMeta, Nothing, Option, Quoted, VarArgs
-from .types import Generic
-
-
-BUILTINS = {
-    'let': Func[[Quoted, VarArgs[Quoted]], TypeVar[None]],
-    'def': Func[[Quoted, VarArgs[Quoted]], TypeVar[None]],
-    'get': Func[[RecordType[{}], Quoted], TypeVar[None]],
-    'if': Func[[Quoted, Quoted, Quoted], TypeVar[None]],
-    'each': Func[[Quoted, ListType[Generic], VarArgs[Quoted]], TypeVar[None]],
-    'if-some': Func[[Quoted, Quoted], TypeVar[None]],
-}
+from .types import TypingMeta, UnionMeta, Nothing, Option, VarArgs
+from .types import TypeTransformer
 
 
 class KinkoTypeError(TypeError):
@@ -122,149 +112,257 @@ def unify(t1, t2):
                              .format(t1, t2))
 
 
-def check_arg(arg, type_, env):
-    if not isinstance(type_, QuotedMeta):
-        arg = check(arg, env)
-        unify(arg.__type__, type_)
-        return arg
-    else:
-        return arg
+class VarCtx(object):
 
-
-def check_args(pos_args, kw_args, fn_type, env):
-    pos_args, kw_args = pos_args[:], kw_args.copy()
-    typed_pos_args, typed_kw_args = [], {}
-
-    for i, arg_type in enumerate(fn_type.__args__):
-        if isinstance(arg_type, NamedArgMeta):
-            try:
-                value = kw_args.pop(arg_type.__arg_name__)
-            except KeyError:
-                raise KinkoTypeError('Missing named argument: {!r}'
-                                     .format(arg_type))
-            else:
-                typed_value = check_arg(value, arg_type.__arg_type__, env)
-                typed_kw_args[arg_type.__arg_name__] = typed_value
-        elif isinstance(arg_type, VarArgsMeta):
-            typed_pos_args.append([
-                check_arg(item, arg_type.__arg_type__, env)
-                for item in pos_args
-            ])
-            pos_args = []
+    def __getattr__(self, name):
+        if name in self.vars:
+            return self.vars[name]
         else:
-            try:
-                value = pos_args.pop(0)
-            except IndexError:
-                raise KinkoTypeError('Missing positional argument: {!r}'
-                                     .format(arg_type))
+            var = self.vars[name] = TypeVar[None]
+            return var
+
+    def __enter__(self):
+        self.vars = {}
+        return self
+
+    def __exit__(self, *exc_info):
+        del self.vars
+
+
+class FreshVars(TypeTransformer):
+
+    def __init__(self):
+        self._mapping = {}
+
+    def visit_typevar(self, type_):
+        if type_ not in self._mapping:
+            self._mapping[type_] = TypeVar[None]
+        return self._mapping[type_]
+
+
+def match_fn(fn_types, args):
+    _pos_args, _kw_args = split_args(args)
+
+    for fn_type in fn_types:
+        norm_args = []
+        pos_args, kw_args = _pos_args[:], _kw_args.copy()
+        for arg_type in fn_type.__args__:
+            if isinstance(arg_type, NamedArgMeta):
+                try:
+                    value = kw_args.pop(arg_type.__arg_name__)
+                except KeyError:
+                    continue
+                else:
+                    norm_args.append(value)
+            elif isinstance(arg_type, VarArgsMeta):
+                norm_args.append(list(pos_args))
+                del pos_args[:]
             else:
-                typed_value = check_arg(value, arg_type, env)
-                typed_pos_args.append(typed_value)
+                try:
+                    value = pos_args.pop(0)
+                except IndexError:
+                    continue
+                else:
+                    norm_args.append(value)
+        if pos_args or kw_args:
+            continue
+        else:
+            return fn_type, norm_args
+    else:
+        raise KinkoTypeError('Function signature didn\'t matches')
 
-    if pos_args or kw_args:
-        raise KinkoTypeError('More arguments than expected')
 
-    return typed_pos_args, typed_kw_args
+def restore_args(fn_type, norm_args):
+    # TODO: preserve original args ordering
+    args = []
+    _norm_args = list(norm_args)
+    for arg_type in fn_type.__args__:
+        if isinstance(arg_type, NamedArgMeta):
+            args.extend([Keyword(arg_type.__arg_name__), _norm_args.pop(0)])
+        elif isinstance(arg_type, VarArgsMeta):
+            args.extend(_norm_args.pop(0))
+        else:
+            args.append(_norm_args.pop(0))
+    assert not _norm_args
+    return args
+
+
+def check_arg(arg, type_, env):
+    arg = check(arg, env)
+    unify(arg.__type__, type_)
+    return arg
+
+
+def check_let(fn_type, env, pairs, body):
+    assert isinstance(pairs, List), repr(pairs)
+    body_env = env.copy()
+    typed_pairs = []
+    for let_sym, let_expr in zip(pairs.values[::2], pairs.values[1::2]):
+        assert isinstance(let_sym, Symbol), repr(let_sym)
+        let_expr = check(let_expr, env)
+        let_sym = Symbol.typed(let_expr.__type__, let_sym.name)
+        body_env[let_sym.name] = let_sym.__type__
+        typed_pairs.append(let_sym)
+        typed_pairs.append(let_expr)
+    typed_body = [check(item, body_env) for item in body]
+    unify(fn_type.__result__, typed_body[-1].__type__)
+    return List(typed_pairs), typed_body
+
+
+def check_def(fn_type, env, sym, body):
+    assert isinstance(sym, Symbol), repr(sym)
+    visitor = _PlaceholdersExtractor()
+    [visitor.visit(n) for n in body]
+    ph_names = visitor.placeholders
+    body_env = env.copy()
+    for ph_name in ph_names:
+        body_env[ph_name] = TypeVar[None]
+    body = [check(item, body_env) for item in body]
+    args = [NamedArg[ph_name, body_env[ph_name].__instance__]
+            for ph_name in ph_names]
+    unify(fn_type.__result__, Func[args, body[-1].__type__])
+    return sym, body
+
+
+def check_get(fn_type, env, obj, attr):
+    obj = check(obj, env)
+    assert isinstance(attr, Symbol)
+    if isinstance(obj.__type__, TypeVarMeta):
+        unify(obj.__type__, RecordType[{attr.name: TypeVar[None]}])
+    try:
+        result_type = get_type(obj).__items__[attr.name]
+    except KeyError:
+        raise KinkoTypeError('Trying to get unknown record '
+                             'attribute: "{}"'.format(attr.name))
+    else:
+        unify(fn_type.__result__, result_type)
+        return obj, attr
+
+
+def check_if1(fn_type, env, test, then_):
+    test = check(test, env)
+    unify(test.__type__, BoolType)
+    then_ = check(then_, env)
+    unify(fn_type.__result__, Option[then_.__type__])
+    return test, then_
+
+
+def check_if2(fn_type, env, test, then_, else_):
+    test = check(test, env)
+    unify(test.__type__, BoolType)
+    then_ = check(then_, env)
+    else_ = check(else_, env)
+    unify(fn_type.__result__, Union[then_.__type__, else_.__type__])
+    return test, then_, else_
+
+
+def check_each(fn_type, env, var, col, body):
+    assert isinstance(var, Symbol)
+    col = check(col, env)
+    unify(col.__type__, ListType[TypeVar[None]])
+    var = Symbol.typed(get_type(col).__item_type__, var.name)
+    body_env = env.copy()
+    body_env[var.name] = var.__type__
+    body = [check(item, body_env) for item in body]
+    unify(fn_type.__result__, ListType[body[-1].__type__])
+    return var, col, body
+
+
+def check_if_some1(fn_type, env, bindings, then_):
+    assert isinstance(bindings, List)
+    bind_sym, bind_expr = bindings.values
+    assert isinstance(bind_sym, Symbol)
+    bind_expr = check(bind_expr, env)
+    bind_expr_type = get_type(bind_expr)
+    then_env = env.copy()
+    if (
+        isinstance(bind_expr_type, UnionMeta) and
+        Nothing in bind_expr_type.__types__
+    ):
+        then_env[bind_sym.name] = \
+            Union[bind_expr_type.__types__ - {Nothing}]
+    else:
+        # TODO: warn that this check is not necessary
+        then_env[bind_sym.name] = bind_expr_type
+    then_ = check(then_, then_env)
+    unify(fn_type.__result__, Option[then_.__type__])
+    return List([bind_sym, bind_expr]), then_
+
+
+def check_if_some2():
+    raise NotImplementedError
+
+
+with VarCtx() as var:
+    LET_TYPE = Func[[var.pairs, VarArgs[var.body]], var.result]
+
+    DEF_TYPE = Func[[var.name, VarArgs[var.body]], var.result]
+
+    GET_TYPE = Func[[RecordType[{}], var.key], var.result]
+
+    IF1_TYPE = Func[[BoolType, var.then_], var.result]
+    IF2_TYPE = Func[[BoolType, var.then_, var.else_], var.result]
+
+    EACH_TYPE = Func[[var.symbol, ListType[var.item], VarArgs[var.body]],
+                     var.result]
+
+    IF_SOME1_TYPE = Func[[var.test, var.then_], var.result]
+    IF_SOME2_TYPE = Func[[var.test, var.then_, var.else_], var.result]
+
+
+FN_TYPES = {
+    LET_TYPE: check_let,
+    DEF_TYPE: check_def,
+    GET_TYPE: check_get,
+    IF1_TYPE: check_if1,
+    IF2_TYPE: check_if2,
+    EACH_TYPE: check_each,
+    IF_SOME1_TYPE: check_if_some1,
+    IF_SOME2_TYPE: check_if_some2,
+}
+
+
+BUILTINS = {
+    'let': [LET_TYPE],
+    'def': [DEF_TYPE],
+    'get': [GET_TYPE],
+    'if': [IF1_TYPE, IF2_TYPE],
+    'each': [EACH_TYPE],
+    'if-some': [IF_SOME1_TYPE, IF_SOME2_TYPE],
+}
+
+
+def check_expr(node, env):
+    sym, args = node.values[0], node.values[1:]
+
+    fn_types = [env.get(sym.name)] if sym.name in env else BUILTINS[sym.name]
+    fn_type, norm_args = match_fn(fn_types, args)
+    fresh_fn_type = FreshVars().visit(fn_type)
+
+    proc = FN_TYPES.get(fn_type)
+    if proc:
+        uni_norm_args = proc(fresh_fn_type, env, *norm_args)
+    else:
+        uni_norm_args = []
+        for arg, arg_type in zip(norm_args, fresh_fn_type.__args__):
+            if isinstance(arg_type, NamedArgMeta):
+                arg = check_arg(arg, arg_type.__arg_type__, env)
+            elif isinstance(arg_type, VarArgsMeta):
+                arg = [check_arg(i, arg_type.__arg_type__, env)
+                       for i in arg]
+            else:
+                arg = check_arg(arg, arg_type, env)
+            uni_norm_args.append(arg)
+
+    uni_args = restore_args(fn_type, uni_norm_args)
+
+    return Tuple.typed(fresh_fn_type.__result__,
+                       [Symbol.typed(fn_type, sym.name)] + uni_args)
 
 
 def check(node, env):
     if isinstance(node, Tuple):
-        sym, args = node.values[0], node.values[1:]
-        pos_args, kw_args = split_args(args)
-
-        fn_type = env.get(sym.name) or BUILTINS[sym.name]
-        sym = Symbol.typed(fn_type, sym.name)
-        pos_args, kw_args = check_args(pos_args, kw_args,
-                                       fn_type, env)
-        if sym.name == 'let':
-            pairs, let_body = pos_args
-            assert isinstance(pairs, List), repr(pairs)
-            let_env = env.copy()
-            typed_pairs = []
-            for let_sym, let_expr in zip(pairs.values[::2], pairs.values[1::2]):
-                assert isinstance(let_sym, Symbol), repr(let_sym)
-                let_expr = check(let_expr, env)
-                let_sym = Symbol.typed(let_expr.__type__, let_sym.name)
-                let_env[let_sym.name] = let_sym.__type__
-                typed_pairs.append(let_sym)
-                typed_pairs.append(let_expr)
-            let_body = [check(item, let_env) for item in let_body]
-            pos_args = [List(typed_pairs)] + let_body
-            result_type = let_body[-1].__type__
-
-        elif sym.name == 'def':
-            def_sym, def_body = pos_args
-            assert isinstance(def_sym, Symbol), repr(def_sym)
-            visitor = _PlaceholdersExtractor()
-            [visitor.visit(n) for n in def_body]
-            ph_names = visitor.placeholders
-            def_env = env.copy()
-            for ph_name in ph_names:
-                def_env[ph_name] = TypeVar[None]
-            def_body = [check(item, def_env) for item in def_body]
-            pos_args = [def_sym] + def_body
-            def_args = [NamedArg[ph_name, def_env[ph_name].__instance__]
-                        for ph_name in ph_names]
-            result_type = Func[def_args, def_body[-1].__type__]
-
-        elif sym.name == 'get':
-            obj, attr = pos_args
-            obj = check(obj, env)
-            assert isinstance(attr, Symbol)
-            if isinstance(obj.__type__, TypeVarMeta):
-                unify(obj.__type__, RecordType[{attr.name: TypeVar[None]}])
-            pos_args = obj, attr
-            try:
-                result_type = get_type(obj).__items__[attr.name]
-            except KeyError:
-                raise KinkoTypeError('Trying to get unknown record '
-                                     'attribute: "{}"'.format(attr.name))
-
-        elif sym.name == 'if':
-            expr, then_, else_ = pos_args
-            expr = check(expr, env)
-            unify(expr.__type__, BoolType)
-            then_ = check(then_, env)
-            else_ = check(else_, env)
-            pos_args = expr, then_, else_
-            result_type = Union[then_.__type__, else_.__type__]
-
-        elif sym.name == 'if-some':
-            bindings, then_ = pos_args
-            assert isinstance(bindings, List)
-            bind_sym, bind_expr = bindings.values
-            assert isinstance(bind_sym, Symbol)
-            bind_expr = check(bind_expr, env)
-            then_env = env.copy()
-            if (
-                isinstance(bind_expr.__type__, UnionMeta) and
-                Nothing in bind_expr.__type__.__types__
-            ):
-                then_env[bind_sym.name] = \
-                    Union[bind_expr.__type__.__types__ - {Nothing}]
-            else:
-                # TODO: warn that this check is not necessary
-                then_env[bind_sym.name] = bind_expr.__type__
-            then_ = check(then_, then_env)
-            pos_args = List([bind_sym, bind_expr]), then_
-            result_type = Option[then_.__type__]
-
-        elif sym.name == 'each':
-            item_sym, item_col, each_body = pos_args
-            assert isinstance(item_sym, Symbol)
-            item_sym = Symbol.typed(get_type(item_col).__item_type__,
-                                    item_sym.name)
-            each_env = env.copy()
-            each_env[item_sym.name] = item_sym.__type__
-            each_body = [check(item, each_env) for item in each_body]
-            pos_args = [item_sym, item_col] + each_body
-            result_type = ListType[each_body[-1].__type__]
-
-        else:
-            result_type = fn_type.__result__
-
-        args = unsplit_args(pos_args, kw_args)
-        return Tuple.typed(result_type, [sym] + args)
+        return check_expr(node, env)
 
     elif isinstance(node, Symbol):
         return Symbol.typed(env[node.name], node.name)
