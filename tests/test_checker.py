@@ -8,7 +8,7 @@ from kinko.nodes import Tuple, Symbol, Number, Node, Keyword, List, Placeholder
 from kinko.nodes import String
 from kinko.types import Func, IntType, StringType, NamedArg, TypeVar, GenericMeta
 from kinko.types import RecordType, ListType, Union, DictType, Option
-from kinko.checker import check, split_args, unsplit_args, KinkoTypeError, unify
+from kinko.checker import check, split_args, KinkoTypeError, unify
 from kinko.checker import LET_TYPE, DEF_TYPE, GET_TYPE, IF2_TYPE, IF_SOME1_TYPE
 from kinko.checker import EACH_TYPE
 
@@ -61,10 +61,6 @@ class TestChecker(ParseMixin, TestCase):
         self.assertEqual(
             split_args([Keyword('foo'), Number(1), Number(2), Number(3)]),
             ([Number(2), Number(3)], {'foo': Number(1)}),
-        )
-        self.assertEqual(
-            unsplit_args([Number(1), Number(2)], {'foo': Number(3)}),
-            [Number(1), Number(2), Keyword('foo'), Number(3)],
         )
         with self.assertRaises(TypeError):
             split_args([Number(1), Keyword('foo')])

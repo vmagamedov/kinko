@@ -1,5 +1,3 @@
-from itertools import chain
-
 from .nodes import Tuple, Number, Keyword, String, List, Symbol, Placeholder
 from .nodes import NodeVisitor
 from .types import IntType, NamedArgMeta, StringType, ListType, VarArgsMeta
@@ -7,6 +5,7 @@ from .types import TypeVarMeta, TypeVar, Func, NamedArg, RecordType
 from .types import RecordTypeMeta, BoolType, Union, ListTypeMeta, DictTypeMeta
 from .types import TypingMeta, UnionMeta, Nothing, Option, VarArgs
 from .types import TypeTransformer
+from .utils import VarsGen
 
 
 class KinkoTypeError(TypeError):
@@ -24,31 +23,15 @@ class _PlaceholdersExtractor(NodeVisitor):
             self.placeholders.append(node.name)
 
 
-def split_args(args):
-    pos_args, kw_args = [], {}
-    i = iter(args)
-    try:
-        while True:
-            arg = next(i)
-            if isinstance(arg, Keyword):
-                try:
-                    val = next(i)
-                except StopIteration:
-                    raise KinkoTypeError('Missing named argument value')
-                else:
-                    kw_args[arg.name] = val
-            else:
-                pos_args.append(arg)
-    except StopIteration:
-        return pos_args, kw_args
+class _FreshVars(TypeTransformer):
 
+    def __init__(self):
+        self._mapping = {}
 
-def unsplit_args(pos_args, kw_args):
-    args = list(pos_args)
-    args.extend(chain.from_iterable(
-        (Keyword(k), v) for k, v in kw_args.items()
-    ))
-    return args
+    def visit_typevar(self, type_):
+        if type_ not in self._mapping:
+            self._mapping[type_] = TypeVar[None]
+        return self._mapping[type_]
 
 
 def get_type(node):
@@ -112,32 +95,23 @@ def unify(t1, t2):
                              .format(t1, t2))
 
 
-class VarCtx(object):
-
-    def __getattr__(self, name):
-        if name in self.vars:
-            return self.vars[name]
-        else:
-            var = self.vars[name] = TypeVar[None]
-            return var
-
-    def __enter__(self):
-        self.vars = {}
-        return self
-
-    def __exit__(self, *exc_info):
-        del self.vars
-
-
-class FreshVars(TypeTransformer):
-
-    def __init__(self):
-        self._mapping = {}
-
-    def visit_typevar(self, type_):
-        if type_ not in self._mapping:
-            self._mapping[type_] = TypeVar[None]
-        return self._mapping[type_]
+def split_args(args):
+    _pos_args, _kw_args = [], {}
+    i = iter(args)
+    try:
+        while True:
+            arg = next(i)
+            if isinstance(arg, Keyword):
+                try:
+                    val = next(i)
+                except StopIteration:
+                    raise KinkoTypeError('Missing named argument value')
+                else:
+                    _kw_args[arg.name] = val
+            else:
+                _pos_args.append(arg)
+    except StopIteration:
+        return _pos_args, _kw_args
 
 
 def match_fn(fn_types, args):
@@ -191,6 +165,26 @@ def check_arg(arg, type_, env):
     arg = check(arg, env)
     unify(arg.__type__, type_)
     return arg
+
+
+var = VarsGen()
+
+LET_TYPE = Func[[var.pairs, VarArgs[var.body]], var.result]
+
+DEF_TYPE = Func[[var.name, VarArgs[var.body]], var.result]
+
+GET_TYPE = Func[[RecordType[{}], var.key], var.result]
+
+IF1_TYPE = Func[[BoolType, var.then_], var.result]
+IF2_TYPE = Func[[BoolType, var.then_, var.else_], var.result]
+
+EACH_TYPE = Func[[var.symbol, ListType[var.item], VarArgs[var.body]],
+                 var.result]
+
+IF_SOME1_TYPE = Func[[var.test, var.then_], var.result]
+IF_SOME2_TYPE = Func[[var.test, var.then_, var.else_], var.result]
+
+del var
 
 
 def check_let(fn_type, env, pairs, body):
@@ -293,23 +287,6 @@ def check_if_some2():
     raise NotImplementedError
 
 
-with VarCtx() as var:
-    LET_TYPE = Func[[var.pairs, VarArgs[var.body]], var.result]
-
-    DEF_TYPE = Func[[var.name, VarArgs[var.body]], var.result]
-
-    GET_TYPE = Func[[RecordType[{}], var.key], var.result]
-
-    IF1_TYPE = Func[[BoolType, var.then_], var.result]
-    IF2_TYPE = Func[[BoolType, var.then_, var.else_], var.result]
-
-    EACH_TYPE = Func[[var.symbol, ListType[var.item], VarArgs[var.body]],
-                     var.result]
-
-    IF_SOME1_TYPE = Func[[var.test, var.then_], var.result]
-    IF_SOME2_TYPE = Func[[var.test, var.then_, var.else_], var.result]
-
-
 FN_TYPES = {
     LET_TYPE: check_let,
     DEF_TYPE: check_def,
@@ -337,7 +314,7 @@ def check_expr(node, env):
 
     fn_types = [env.get(sym.name)] if sym.name in env else BUILTINS[sym.name]
     fn_type, norm_args = match_fn(fn_types, args)
-    fresh_fn_type = FreshVars().visit(fn_type)
+    fresh_fn_type = _FreshVars().visit(fn_type)
 
     proc = FN_TYPES.get(fn_type)
     if proc:
