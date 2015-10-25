@@ -157,3 +157,33 @@ class NodeVisitor(object):
 
     def visit_string(self, node):
         pass
+
+
+class NodeTransformer(object):
+
+    def visit(self, node):
+        return node.accept(self)
+
+    def visit_tuple(self, node):
+        return Tuple([self.visit(i) for i in node.values])
+
+    def visit_list(self, node):
+        return List([self.visit(i) for i in node.values])
+
+    def visit_dict(self, node):
+        return Dict([self.visit(i) for i in node.values])
+
+    def visit_symbol(self, node):
+        return Symbol(node.name)
+
+    def visit_keyword(self, node):
+        return Keyword(node.name)
+
+    def visit_placeholder(self, node):
+        return Placeholder(node.name)
+
+    def visit_number(self, node):
+        return Number(node.value)
+
+    def visit_string(self, node):
+        return String(node.value)

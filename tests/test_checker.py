@@ -6,11 +6,12 @@ except ImportError:
 
 from kinko.nodes import Tuple, Symbol, Number, Node, Keyword, List, Placeholder
 from kinko.nodes import String
-from kinko.types import Func, IntType, StringType, NamedArg, TypeVar, GenericMeta
+from kinko.types import Func, IntType, StringType, NamedArg, TypeVar
 from kinko.types import RecordType, ListType, Union, DictType, Option
-from kinko.checker import check, split_args, KinkoTypeError, unify
+from kinko.types import GenericMeta
+from kinko.checker import Environ, check, split_args, KinkoTypeError, EACH_TYPE
 from kinko.checker import LET_TYPE, DEF_TYPE, GET_TYPE, IF2_TYPE, IF_SOME1_TYPE
-from kinko.checker import EACH_TYPE
+from kinko.checker import unify, NamesResolver, DefsMappingVisitor, Unchecked
 
 from .test_parser import node_eq, node_ne, ParseMixin
 
@@ -48,7 +49,7 @@ class TestChecker(ParseMixin, TestCase):
         self.node_patcher.stop()
 
     def check(self, src, env=None):
-        return check(self.parse_expr(src), env or {})
+        return check(self.parse_expr(src), Environ(env))
 
     def assertChecks(self, src, typed, extra_env=None):
         self.assertEqual(self.check(src, extra_env), typed)
@@ -163,7 +164,7 @@ class TestChecker(ParseMixin, TestCase):
 
     def testInfer(self):
         inc_type = Func[[IntType], IntType]
-        foo_type = Func[[NamedArg['arg', IntType]], IntType]
+        foo_type = Func[[NamedArg['arg', TypeVar[IntType]]], IntType]
         self.assertChecks(
             """
             def foo
@@ -204,7 +205,7 @@ class TestChecker(ParseMixin, TestCase):
     def testRecordInfer(self):
         bar_type = RecordType[{'baz': TypeVar[IntType]}]
         inc_type = Func[[IntType], IntType]
-        foo_type = Func[[NamedArg['bar', bar_type]], IntType]
+        foo_type = Func[[NamedArg['bar', TypeVar[bar_type]]], IntType]
         self.assertChecks(
             """
             def foo
@@ -335,3 +336,30 @@ class TestChecker(ParseMixin, TestCase):
         with self.assertRaises(KinkoTypeError):
             self.check('foo [1 2 "3"]',
                        {'foo': Func[[ListType[IntType]], IntType]})
+
+    def testDependent(self):
+        node = self.parse("""
+        def foo
+          self/bar :arg "value"
+
+        def bar
+          #arg
+        """)
+        node = NamesResolver('test').visit(node)
+
+        dmv = DefsMappingVisitor()
+        dmv.visit(node)
+        env = Environ({key: Unchecked(value, False)
+                       for key, value in dmv.mapping.items()})
+
+        node = check(node, env)
+
+        foo_expr, bar_expr = node.values
+        self.assertEqual(foo_expr.__type__,
+                         TypeVar[Func[[], TypeVar[StringType]]])
+        self.assertEqual(bar_expr.__type__,
+                         TypeVar[Func[[NamedArg['arg', TypeVar[None]]],
+                                      TypeVar[None]]])
+        # checks that TypeVar instance is the same
+        self.assertIs(bar_expr.__type__.__instance__.__args__[0].__arg_type__,
+                      bar_expr.__type__.__instance__.__result__)

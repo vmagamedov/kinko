@@ -1,5 +1,8 @@
+from contextlib import contextmanager
+from collections import namedtuple, deque
+
 from .nodes import Tuple, Number, Keyword, String, List, Symbol, Placeholder
-from .nodes import NodeVisitor
+from .nodes import NodeVisitor, NodeTransformer
 from .types import IntType, NamedArgMeta, StringType, ListType, VarArgsMeta
 from .types import TypeVarMeta, TypeVar, Func, NamedArg, RecordType
 from .types import RecordTypeMeta, BoolType, Union, ListTypeMeta, DictTypeMeta
@@ -10,6 +13,69 @@ from .utils import VarsGen
 
 class KinkoTypeError(TypeError):
     pass
+
+
+class Environ(object):
+
+    def __init__(self, defs=None):
+        self.vars = deque([{}])
+        self.defs = defs.copy() if defs else {}
+
+    @contextmanager
+    def push(self, mapping):
+        self.vars.append(mapping)
+        try:
+            yield
+        finally:
+            self.vars.pop()
+
+    def __getitem__(self, key):
+        for d in reversed(self.vars):
+            try:
+                return d[key]
+            except KeyError:
+                continue
+        else:
+            return self.defs[key]
+
+    def __contains__(self, key):
+        return any(key in d for d in self.vars) or key in self.defs
+
+    def define(self, name, value):
+        self.defs[name] = value
+
+
+class NamesResolver(NodeTransformer):
+
+    def __init__(self, ns):
+        self.ns = ns
+
+    def visit_symbol(self, node):
+        ns, sep, name = node.name.partition('/')
+        if name and ns == 'self':
+            return Symbol(sep.join([self.ns, name]))
+        else:
+            return node
+
+    def visit_tuple(self, node):
+        if node.values[0].name == 'def':
+            (def_sym, name_sym), body = node.values[:2], node.values[2:]
+            qualified_name = '/'.join([self.ns, name_sym.name])
+            return Tuple([self.visit(def_sym), Symbol(qualified_name)] +
+                         [self.visit(i) for i in body])
+        else:
+            return super(NamesResolver, self).visit_tuple(node)
+
+
+class DefsMappingVisitor(NodeVisitor):
+
+    def __init__(self):
+        self.mapping = {}
+
+    def visit_tuple(self, node):
+        if node.values[0].name == 'def':
+            self.mapping[node.values[1].name] = node
+        super(DefsMappingVisitor, self).visit_tuple(node)
 
 
 class _PlaceholdersExtractor(NodeVisitor):
@@ -189,16 +255,17 @@ del var
 
 def check_let(fn_type, env, pairs, body):
     assert isinstance(pairs, List), repr(pairs)
-    body_env = env.copy()
+    let_vars = {}
     typed_pairs = []
     for let_sym, let_expr in zip(pairs.values[::2], pairs.values[1::2]):
         assert isinstance(let_sym, Symbol), repr(let_sym)
         let_expr = check(let_expr, env)
         let_sym = Symbol.typed(let_expr.__type__, let_sym.name)
-        body_env[let_sym.name] = let_sym.__type__
+        let_vars[let_sym.name] = let_sym.__type__
         typed_pairs.append(let_sym)
         typed_pairs.append(let_expr)
-    typed_body = [check(item, body_env) for item in body]
+    with env.push(let_vars):
+        typed_body = [check(item, env) for item in body]
     unify(fn_type.__result__, typed_body[-1].__type__)
     return List(typed_pairs), typed_body
 
@@ -207,14 +274,14 @@ def check_def(fn_type, env, sym, body):
     assert isinstance(sym, Symbol), repr(sym)
     visitor = _PlaceholdersExtractor()
     [visitor.visit(n) for n in body]
-    ph_names = visitor.placeholders
-    body_env = env.copy()
-    for ph_name in ph_names:
-        body_env[ph_name] = TypeVar[None]
-    body = [check(item, body_env) for item in body]
-    args = [NamedArg[ph_name, body_env[ph_name].__instance__]
-            for ph_name in ph_names]
+    kw_arg_names = visitor.placeholders
+    def_vars = {name: TypeVar[None] for name in kw_arg_names}
+    with env.push(def_vars):
+        body = [check(item, env) for item in body]
+    args = [NamedArg[name, def_vars[name]] for name in kw_arg_names]
     unify(fn_type.__result__, Func[args, body[-1].__type__])
+    # register new definition type in env
+    env.define(sym.name, fn_type.__result__.__instance__)
     return sym, body
 
 
@@ -255,9 +322,8 @@ def check_each(fn_type, env, var, col, body):
     col = check(col, env)
     unify(col.__type__, ListType[TypeVar[None]])
     var = Symbol.typed(get_type(col).__item_type__, var.name)
-    body_env = env.copy()
-    body_env[var.name] = var.__type__
-    body = [check(item, body_env) for item in body]
+    with env.push({var.name: var.__type__}):
+        body = [check(item, env) for item in body]
     unify(fn_type.__result__, ListType[body[-1].__type__])
     return var, col, body
 
@@ -268,17 +334,16 @@ def check_if_some1(fn_type, env, bindings, then_):
     assert isinstance(bind_sym, Symbol)
     bind_expr = check(bind_expr, env)
     bind_expr_type = get_type(bind_expr)
-    then_env = env.copy()
     if (
         isinstance(bind_expr_type, UnionMeta) and
         Nothing in bind_expr_type.__types__
     ):
-        then_env[bind_sym.name] = \
-            Union[bind_expr_type.__types__ - {Nothing}]
+        then_expr_type = Union[bind_expr_type.__types__ - {Nothing}]
     else:
         # TODO: warn that this check is not necessary
-        then_env[bind_sym.name] = bind_expr_type
-    then_ = check(then_, then_env)
+        then_expr_type = bind_expr_type
+    with env.push({bind_sym.name: then_expr_type}):
+        then_ = check(then_, env)
     unify(fn_type.__result__, Option[then_.__type__])
     return List([bind_sym, bind_expr]), then_
 
@@ -309,14 +374,37 @@ BUILTINS = {
 }
 
 
+Unchecked = namedtuple('Unchecked', 'node in_progress')
+
+
 def check_expr(node, env):
     sym, args = node.values[0], node.values[1:]
 
-    fn_types = [env.get(sym.name)] if sym.name in env else BUILTINS[sym.name]
-    fn_type, norm_args = match_fn(fn_types, args)
-    fresh_fn_type = _FreshVars().visit(fn_type)
+    try:
+        fn_type = env[sym.name]
+    except KeyError:
+        try:
+            fn_types = BUILTINS[sym.name]
+        except KeyError:
+            raise KinkoTypeError('Unknown function name: {}'.format(sym.name))
+    else:
+        if isinstance(fn_type, Unchecked):
+            if fn_type.in_progress:
+                raise KinkoTypeError('Recursive call of the {} function'
+                                     .format(sym.name))
+            else:
+                env.define(sym.name, fn_type._replace(in_progress=True))
+                check(fn_type.node, env)
+                # after checking dependent node it should be registered
+                # in environ and recursive check_expr call should work
+                return check_expr(node, env)
+        else:
+            fn_types = [fn_type]
 
-    proc = FN_TYPES.get(fn_type)
+    matched_fn_type, norm_args = match_fn(fn_types, args)
+    fresh_fn_type = _FreshVars().visit(matched_fn_type)
+
+    proc = FN_TYPES.get(matched_fn_type)
     if proc:
         uni_norm_args = proc(fresh_fn_type, env, *norm_args)
     else:
@@ -331,10 +419,10 @@ def check_expr(node, env):
                 arg = check_arg(arg, arg_type, env)
             uni_norm_args.append(arg)
 
-    uni_args = restore_args(fn_type, uni_norm_args)
+    uni_args = restore_args(matched_fn_type, uni_norm_args)
 
     return Tuple.typed(fresh_fn_type.__result__,
-                       [Symbol.typed(fn_type, sym.name)] + uni_args)
+                       [Symbol.typed(matched_fn_type, sym.name)] + uni_args)
 
 
 def check(node, env):
