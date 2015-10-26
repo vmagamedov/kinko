@@ -58,7 +58,7 @@ class NamesResolver(NodeTransformer):
 
     def visit_symbol(self, node):
         ns, sep, name = node.name.partition('/')
-        if name and ns == 'self':
+        if name and ns == '.':
             return Symbol(sep.join([self.ns, name]))
         else:
             return node

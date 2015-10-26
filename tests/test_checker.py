@@ -424,7 +424,7 @@ class TestChecker(ParseMixin, TestCase):
     def testDependent(self):
         node = self.parse("""
         def foo
-          self/bar :arg "value"
+          ./bar :arg "value"
 
         def bar
           #arg
