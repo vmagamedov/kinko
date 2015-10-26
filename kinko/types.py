@@ -171,6 +171,22 @@ class NamedArg(with_metaclass(NamedArgMeta, object)):
     pass
 
 
+class VarNamedArgsMeta(TypingMeta):
+
+    def __cls_init__(cls, arg_type):
+        cls.__arg_type__ = arg_type
+
+    def __repr__(cls):
+        return '{}[{!r}]'.format(cls.__name__, cls.__arg_type__)
+
+    def accept(cls, visitor):
+        return visitor.visit_varnamedargs(cls)
+
+
+class VarNamedArgs(with_metaclass(VarNamedArgsMeta, object)):
+    pass
+
+
 class ListTypeMeta(TypingMeta):
 
     def __cls_init__(cls, item_type):
@@ -260,6 +276,9 @@ class TypeTransformer(object):
 
     def visit_namedarg(self, type_):
         return NamedArg[type_.__arg_name__, self.visit(type_.__arg_type__)]
+
+    def visit_varnamedargs(self, type_):
+        return VarNamedArgs[self.visit(type_.__arg_type__)]
 
     def visit_list(self, type_):
         return ListType[self.visit(type_.__item_type__)]

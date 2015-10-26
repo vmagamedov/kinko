@@ -8,10 +8,11 @@ from kinko.nodes import Tuple, Symbol, Number, Node, Keyword, List, Placeholder
 from kinko.nodes import String
 from kinko.types import Func, IntType, StringType, NamedArg, TypeVar
 from kinko.types import RecordType, ListType, Union, DictType, Option
-from kinko.types import GenericMeta
+from kinko.types import GenericMeta, VarArgs, VarNamedArgs
 from kinko.checker import Environ, check, split_args, KinkoTypeError, EACH_TYPE
 from kinko.checker import LET_TYPE, DEF_TYPE, GET_TYPE, IF2_TYPE, IF_SOME1_TYPE
 from kinko.checker import unify, NamesResolver, DefsMappingVisitor, Unchecked
+from kinko.checker import match_fn, restore_args
 
 from .test_parser import node_eq, node_ne, ParseMixin
 
@@ -65,6 +66,72 @@ class TestChecker(ParseMixin, TestCase):
         )
         with self.assertRaises(TypeError):
             split_args([Number(1), Keyword('foo')])
+
+    def testMatchFn(self):
+        # basic args
+        self.assertEqual(
+            match_fn([Func[[IntType, IntType], IntType]],
+                     [1, 2]),
+            (Func[[IntType, IntType], IntType], [1, 2])
+        )
+        with self.assertRaises(KinkoTypeError):
+            match_fn([Func[[IntType, IntType], IntType]],
+                     [1])
+        with self.assertRaises(KinkoTypeError):
+            match_fn([Func[[IntType, IntType], IntType]],
+                     [1, 2, 3])
+        # named args
+        self.assertEqual(
+            match_fn([Func[[IntType, NamedArg['foo', IntType]], IntType]],
+                     [1, Keyword('foo'), 2]),
+            (Func[[IntType, NamedArg['foo', IntType]], IntType], [1, 2])
+        )
+        self.assertEqual(
+            match_fn([Func[[IntType, NamedArg['foo', IntType]], IntType]],
+                     [Keyword('foo'), 2, 1]),
+            (Func[[IntType, NamedArg['foo', IntType]], IntType], [1, 2])
+        )
+        with self.assertRaises(KinkoTypeError):
+            match_fn([Func[[IntType, NamedArg['foo', IntType]], IntType]],
+                     [1])
+        with self.assertRaises(KinkoTypeError):
+            match_fn([Func[[IntType, NamedArg['foo', IntType]], IntType]],
+                     [1, Keyword('foo'), 2, Keyword('bar'), 3])
+        # variable args
+        self.assertEqual(
+            match_fn([Func[[IntType, VarArgs[IntType]], IntType]],
+                     [1, 2, 3]),
+            (Func[[IntType, VarArgs[IntType]], IntType], [1, [2, 3]])
+        )
+        # variable named args
+        self.assertEqual(
+            match_fn([Func[[IntType, VarNamedArgs[IntType]], IntType]],
+                     [1, Keyword('foo'), 2, Keyword('bar'), 3]),
+            (Func[[IntType, VarNamedArgs[IntType]], IntType],
+             [1, {'foo': 2, 'bar': 3}])
+        )
+
+    def testRestoreArgs(self):
+        self.assertEqual(
+            restore_args(Func[[IntType, IntType], IntType],
+                         [1, 2]),
+            [1, 2],
+        )
+        self.assertEqual(
+            restore_args(Func[[IntType, NamedArg['foo', IntType]], IntType],
+                         [1, 2]),
+            [1, Keyword('foo'), 2],
+        )
+        self.assertEqual(
+            restore_args(Func[[IntType, VarArgs[IntType]], IntType],
+                         [1, [2, 3, 4]]),
+            [1, 2, 3, 4],
+        )
+        self.assertEqual(
+            restore_args(Func[[IntType, VarNamedArgs[IntType]], IntType],
+                         [1, {'foo': 2}]),
+            [1, Keyword('foo'), 2],
+        )
 
     def testUnifyType(self):
         unify(IntType, IntType)

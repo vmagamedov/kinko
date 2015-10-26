@@ -1,3 +1,4 @@
+from itertools import chain
 from contextlib import contextmanager
 from collections import namedtuple, deque
 
@@ -7,8 +8,9 @@ from .types import IntType, NamedArgMeta, StringType, ListType, VarArgsMeta
 from .types import TypeVarMeta, TypeVar, Func, NamedArg, RecordType
 from .types import RecordTypeMeta, BoolType, Union, ListTypeMeta, DictTypeMeta
 from .types import TypingMeta, UnionMeta, Nothing, Option, VarArgs
-from .types import TypeTransformer
+from .types import TypeTransformer, OutputType, VarNamedArgs, VarNamedArgsMeta
 from .utils import VarsGen
+from .constant import HTML_ELEMENTS
 
 
 class KinkoTypeError(TypeError):
@@ -186,25 +188,31 @@ def match_fn(fn_types, args):
     for fn_type in fn_types:
         norm_args = []
         pos_args, kw_args = _pos_args[:], _kw_args.copy()
+        missing_arg = False
         for arg_type in fn_type.__args__:
             if isinstance(arg_type, NamedArgMeta):
                 try:
                     value = kw_args.pop(arg_type.__arg_name__)
                 except KeyError:
-                    continue
+                    missing_arg = True
+                    break
                 else:
                     norm_args.append(value)
             elif isinstance(arg_type, VarArgsMeta):
                 norm_args.append(list(pos_args))
                 del pos_args[:]
+            elif isinstance(arg_type, VarNamedArgsMeta):
+                norm_args.append(kw_args.copy())
+                kw_args.clear()
             else:
                 try:
                     value = pos_args.pop(0)
                 except IndexError:
-                    continue
+                    missing_arg = True
+                    break
                 else:
                     norm_args.append(value)
-        if pos_args or kw_args:
+        if pos_args or kw_args or missing_arg:
             continue
         else:
             return fn_type, norm_args
@@ -218,9 +226,15 @@ def restore_args(fn_type, norm_args):
     _norm_args = list(norm_args)
     for arg_type in fn_type.__args__:
         if isinstance(arg_type, NamedArgMeta):
-            args.extend([Keyword(arg_type.__arg_name__), _norm_args.pop(0)])
+            args.extend((Keyword(arg_type.__arg_name__),
+                         _norm_args.pop(0)))
         elif isinstance(arg_type, VarArgsMeta):
             args.extend(_norm_args.pop(0))
+        elif isinstance(arg_type, VarNamedArgsMeta):
+            args.extend(chain.from_iterable(
+                (Keyword(key), value)
+                for key, value in _norm_args.pop(0).items()
+            ))
         else:
             args.append(_norm_args.pop(0))
     assert not _norm_args
@@ -233,24 +247,29 @@ def check_arg(arg, type_, env):
     return arg
 
 
-var = VarsGen()
+__var = VarsGen()
 
-LET_TYPE = Func[[var.pairs, VarArgs[var.body]], var.result]
+LET_TYPE = Func[[__var.pairs, VarArgs[__var.body]], __var.result]
 
-DEF_TYPE = Func[[var.name, VarArgs[var.body]], var.result]
+DEF_TYPE = Func[[__var.name, VarArgs[__var.body]], __var.result]
 
-GET_TYPE = Func[[RecordType[{}], var.key], var.result]
+GET_TYPE = Func[[RecordType[{}], __var.key], __var.result]
 
-IF1_TYPE = Func[[BoolType, var.then_], var.result]
-IF2_TYPE = Func[[BoolType, var.then_, var.else_], var.result]
+IF1_TYPE = Func[[BoolType, __var.then_], __var.result]
+IF2_TYPE = Func[[BoolType, __var.then_, __var.else_], __var.result]
 
-EACH_TYPE = Func[[var.symbol, ListType[var.item], VarArgs[var.body]],
-                 var.result]
+EACH_TYPE = Func[[__var.symbol, ListType[__var.item], VarArgs[__var.body]],
+                 __var.result]
 
-IF_SOME1_TYPE = Func[[var.test, var.then_], var.result]
-IF_SOME2_TYPE = Func[[var.test, var.then_, var.else_], var.result]
+IF_SOME1_TYPE = Func[[__var.test, __var.then_], __var.result]
+IF_SOME2_TYPE = Func[[__var.test, __var.then_, __var.else_], __var.result]
 
-del var
+HTML_TAG_TYPE = Func[[VarNamedArgs[StringType], VarArgs[OutputType]],
+                     OutputType]
+
+JOIN_TYPE = Func[[VarArgs[OutputType]], OutputType]
+
+del __var
 
 
 def check_let(fn_type, env, pairs, body):
@@ -371,7 +390,10 @@ BUILTINS = {
     'if': [IF1_TYPE, IF2_TYPE],
     'each': [EACH_TYPE],
     'if-some': [IF_SOME1_TYPE, IF_SOME2_TYPE],
+    'join': [JOIN_TYPE],
 }
+for tag_name in HTML_ELEMENTS:
+    BUILTINS[tag_name] = [HTML_TAG_TYPE]
 
 
 Unchecked = namedtuple('Unchecked', 'node in_progress')
@@ -415,6 +437,9 @@ def check_expr(node, env):
             elif isinstance(arg_type, VarArgsMeta):
                 arg = [check_arg(i, arg_type.__arg_type__, env)
                        for i in arg]
+            elif isinstance(arg_type, VarNamedArgsMeta):
+                arg = {k: check_arg(v, arg_type.__arg_type__, env)
+                       for k, v in arg.items()}
             else:
                 arg = check_arg(arg, arg_type, env)
             uni_norm_args.append(arg)
