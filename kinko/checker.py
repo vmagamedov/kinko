@@ -8,7 +8,7 @@ from .types import IntType, NamedArgMeta, StringType, ListType, VarArgsMeta
 from .types import TypeVarMeta, TypeVar, Func, NamedArg, RecordType
 from .types import RecordTypeMeta, BoolType, Union, ListTypeMeta, DictTypeMeta
 from .types import TypingMeta, UnionMeta, Nothing, Option, VarArgs
-from .types import TypeTransformer, OutputType, VarNamedArgs, VarNamedArgsMeta
+from .types import TypeTransformer, Output, VarNamedArgs, VarNamedArgsMeta
 from .utils import VarsGen
 from .constant import HTML_ELEMENTS
 
@@ -264,10 +264,9 @@ EACH_TYPE = Func[[__var.symbol, ListType[__var.item], VarArgs[__var.body]],
 IF_SOME1_TYPE = Func[[__var.test, __var.then_], __var.result]
 IF_SOME2_TYPE = Func[[__var.test, __var.then_, __var.else_], __var.result]
 
-HTML_TAG_TYPE = Func[[VarNamedArgs[StringType], VarArgs[OutputType]],
-                     OutputType]
+HTML_TAG_TYPE = Func[[VarNamedArgs[StringType], VarArgs[Output]], Output]
 
-JOIN_TYPE = Func[[VarArgs[OutputType]], OutputType]
+JOIN_TYPE = Func[[VarArgs[Output]], Output]
 
 del __var
 

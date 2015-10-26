@@ -6,13 +6,13 @@ except ImportError:
 
 from kinko.nodes import Tuple, Symbol, Number, Node, Keyword, List, Placeholder
 from kinko.nodes import String
-from kinko.types import Func, IntType, StringType, NamedArg, TypeVar
+from kinko.types import Func, IntType, StringType, NamedArg, TypeVar, Output
 from kinko.types import RecordType, ListType, Union, DictType, Option
 from kinko.types import GenericMeta, VarArgs, VarNamedArgs
 from kinko.checker import Environ, check, split_args, KinkoTypeError, EACH_TYPE
 from kinko.checker import LET_TYPE, DEF_TYPE, GET_TYPE, IF2_TYPE, IF_SOME1_TYPE
 from kinko.checker import unify, NamesResolver, DefsMappingVisitor, Unchecked
-from kinko.checker import match_fn, restore_args
+from kinko.checker import match_fn, restore_args, HTML_TAG_TYPE
 
 from .test_parser import node_eq, node_ne, ParseMixin
 
@@ -403,6 +403,23 @@ class TestChecker(ParseMixin, TestCase):
         with self.assertRaises(KinkoTypeError):
             self.check('foo [1 2 "3"]',
                        {'foo': Func[[ListType[IntType]], IntType]})
+
+    def testHTMLTags(self):
+        self.assertChecks(
+            """
+            div :foo "bar"
+              span "Some Text"
+            """,
+            Tuple.typed(Output, [
+                Symbol.typed(HTML_TAG_TYPE, 'div'),
+                Keyword('foo'),
+                String.typed(StringType, 'bar'),
+                Tuple.typed(Output, [
+                    Symbol.typed(HTML_TAG_TYPE, 'span'),
+                    String.typed(StringType, 'Some Text'),
+                ]),
+            ]),
+        )
 
     def testDependent(self):
         node = self.parse("""
