@@ -1,3 +1,6 @@
+from .compat import texttype
+
+
 class Node(object):
 
     def __init__(self, location=None):  # kwarg-only
@@ -34,12 +37,12 @@ class Symbol(Node):
 class String(Node):
 
     def __init__(self, value, **kw):
-        self.value = unicode(value)
+        self.value = texttype(value)
         super(String, self).__init__(**kw)
 
     def __repr__(self):
         return '"{}"'.format(
-            repr(self.value)[2:-1]
+            repr(self.value).lstrip('u')[1:-1]
             .replace('\\"', '"').replace("\\'", "'")
             .replace('"', '\\"')
         )
