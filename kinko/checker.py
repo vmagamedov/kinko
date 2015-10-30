@@ -259,6 +259,11 @@ def check_arg(arg, type_, env):
     return arg
 
 
+_StringLike = Union[Nothing, IntType, StringType]
+
+_OutputLike = Union[_StringLike, Output]
+
+
 __var = VarsGen()
 
 LET_TYPE = Func[[__var.pairs, VarArgs[__var.body]], __var.result]
@@ -270,16 +275,17 @@ GET_TYPE = Func[[RecordType[{}], __var.key], __var.result]
 IF1_TYPE = Func[[BoolType, __var.then_], __var.result]
 IF2_TYPE = Func[[BoolType, __var.then_, __var.else_], __var.result]
 
-EACH_TYPE = Func[[__var.symbol, ListType[__var.item], VarArgs[Output]],
+EACH_TYPE = Func[[__var.symbol, ListType[__var.item], VarArgs[_OutputLike]],
                  Output]
 
 IF_SOME1_TYPE = Func[[__var.test, __var.then_], __var.result]
 IF_SOME2_TYPE = Func[[__var.test, __var.then_, __var.else_], __var.result]
 
-HTML_TAG_TYPE = Func[[VarNamedArgs[Output], VarArgs[Output]], Output]
+HTML_TAG_TYPE = Func[[VarNamedArgs[_StringLike], VarArgs[_OutputLike]],
+                     Output]
 
-JOIN1_TYPE = Func[[ListType[Output]], Output]
-JOIN2_TYPE = Func[[Output, ListType[Output]], Output]
+JOIN1_TYPE = Func[[ListType[_OutputLike]], Output]
+JOIN2_TYPE = Func[[StringType, ListType[_OutputLike]], Output]
 
 del __var
 

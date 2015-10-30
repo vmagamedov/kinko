@@ -50,6 +50,16 @@ class IntType(with_metaclass(IntTypeMeta, object)):
     pass
 
 
+class OutputMeta(GenericMeta):
+
+    def accept(cls, visitor):
+        return visitor.visit_nothing(cls)
+
+
+class Output(with_metaclass(NothingMeta, object)):
+    pass
+
+
 class TypingMeta(GenericMeta):
 
     def __cls_init__(cls, *args):
@@ -224,9 +234,6 @@ class RecordTypeMeta(TypingMeta):
 
 class RecordType(with_metaclass(RecordTypeMeta, object)):
     pass
-
-
-Output = Union[Nothing, StringType, IntType]
 
 
 class TypeTransformer(object):
