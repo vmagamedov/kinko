@@ -6,8 +6,8 @@ except ImportError:
 
 from kinko.nodes import Tuple, Symbol, Number, Node, Keyword, List, Placeholder
 from kinko.nodes import String
-from kinko.types import Func, IntType, StringType, NamedArg, TypeVar, Output
-from kinko.types import RecordType, ListType, Union, DictType, Option
+from kinko.types import Func, IntType, StringType, NamedArg, TypeVar, Markup
+from kinko.types import Record, ListType, Union, DictType, Option
 from kinko.types import GenericMeta, VarArgs, VarNamedArgs
 from kinko.checker import Environ, check, split_args, KinkoTypeError, EACH_TYPE
 from kinko.checker import LET_TYPE, DEF_TYPE, GET_TYPE, IF2_TYPE, IF_SOME1_TYPE
@@ -160,12 +160,12 @@ class TestChecker(ParseMixin, TestCase):
         unify(StringType, a)
 
     def testUnifyRecordType(self):
-        rec_type = RecordType[{'a': IntType}]
-        unify(rec_type, RecordType[{'b': IntType}])
-        self.assertEqual(rec_type, RecordType[{'a': IntType, 'b': IntType}])
+        rec_type = Record[{'a': IntType}]
+        unify(rec_type, Record[{'b': IntType}])
+        self.assertEqual(rec_type, Record[{'a': IntType, 'b': IntType}])
 
         with self.assertRaises(KinkoTypeError):
-            unify(RecordType[{'a': IntType}], RecordType[{'a': StringType}])
+            unify(Record[{'a': IntType}], Record[{'a': StringType}])
 
     def testUnifyListType(self):
         list_type = ListType[TypeVar[None]]
@@ -250,7 +250,7 @@ class TestChecker(ParseMixin, TestCase):
 
     def testRecord(self):
         inc_type = Func[[IntType], IntType]
-        bar_type = RecordType[{'baz': IntType}]
+        bar_type = Record[{'baz': IntType}]
         self.assertChecks(
             """
             inc bar.baz
@@ -270,7 +270,7 @@ class TestChecker(ParseMixin, TestCase):
                        {'inc': inc_type, 'bar': bar_type})
 
     def testRecordInfer(self):
-        bar_type = RecordType[{'baz': TypeVar[IntType]}]
+        bar_type = Record[{'baz': TypeVar[IntType]}]
         inc_type = Func[[IntType], IntType]
         foo_type = Func[[NamedArg['bar', TypeVar[bar_type]]], IntType]
         self.assertChecks(
@@ -319,7 +319,7 @@ class TestChecker(ParseMixin, TestCase):
 
     def testIfSome(self):
         inc_type = Func[[IntType], IntType]
-        foo_type = RecordType[{'bar': Option[IntType]}]
+        foo_type = Record[{'bar': Option[IntType]}]
         env = {'inc': inc_type, 'foo': foo_type}
         self.assertChecks(
             """
@@ -347,14 +347,14 @@ class TestChecker(ParseMixin, TestCase):
 
     def testEach(self):
         inc_type = Func[[IntType], IntType]
-        rec_type = RecordType[{'attr': IntType}]
+        rec_type = Record[{'attr': IntType}]
         list_rec_type = ListType[rec_type]
         self.assertChecks(
             """
             each i collection
               inc i.attr
             """,
-            Tuple.typed(Output, [
+            Tuple.typed(Markup, [
                 Symbol.typed(EACH_TYPE, 'each'),
                 Symbol.typed(rec_type, 'i'),
                 Symbol.typed(list_rec_type, 'collection'),
@@ -410,11 +410,11 @@ class TestChecker(ParseMixin, TestCase):
             div :foo "bar"
               span "Some Text"
             """,
-            Tuple.typed(Output, [
+            Tuple.typed(Markup, [
                 Symbol.typed(HTML_TAG_TYPE, 'div'),
                 Keyword('foo'),
                 String.typed(StringType, 'bar'),
-                Tuple.typed(Output, [
+                Tuple.typed(Markup, [
                     Symbol.typed(HTML_TAG_TYPE, 'span'),
                     String.typed(StringType, 'Some Text'),
                 ]),

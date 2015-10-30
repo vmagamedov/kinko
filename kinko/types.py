@@ -50,13 +50,13 @@ class IntType(with_metaclass(IntTypeMeta, object)):
     pass
 
 
-class OutputMeta(GenericMeta):
+class MarkupMeta(GenericMeta):
 
     def accept(cls, visitor):
-        return visitor.visit_nothing(cls)
+        return visitor.visit_markup(cls)
 
 
-class Output(with_metaclass(NothingMeta, object)):
+class Markup(with_metaclass(MarkupMeta, object)):
     pass
 
 
@@ -220,7 +220,7 @@ class DictType(with_metaclass(DictTypeMeta, object)):
     pass
 
 
-class RecordTypeMeta(TypingMeta):
+class RecordMeta(TypingMeta):
 
     def __cls_init__(cls, items):
         cls.__items__ = dict(items)
@@ -232,7 +232,7 @@ class RecordTypeMeta(TypingMeta):
         return visitor.visit_record(cls)
 
 
-class RecordType(with_metaclass(RecordTypeMeta, object)):
+class Record(with_metaclass(RecordMeta, object)):
     pass
 
 
@@ -253,7 +253,7 @@ class TypeTransformer(object):
     def visit_int(self, type_):
         return type_
 
-    def visit_output(self, type_):
+    def visit_markup(self, type_):
         return type_
 
     def visit_typevar(self, type_):
@@ -288,5 +288,5 @@ class TypeTransformer(object):
                         self.visit(type_.__value_type__)]
 
     def visit_record(self, type_):
-        return RecordType[{key: self.visit(value)
-                           for key, value in type_.__items__.items()}]
+        return Record[{key: self.visit(value)
+                       for key, value in type_.__items__.items()}]

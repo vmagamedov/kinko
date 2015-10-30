@@ -5,10 +5,10 @@ from collections import namedtuple, deque
 from .nodes import Tuple, Number, Keyword, String, List, Symbol, Placeholder
 from .nodes import NodeVisitor, NodeTransformer
 from .types import IntType, NamedArgMeta, StringType, ListType, VarArgsMeta
-from .types import TypeVarMeta, TypeVar, Func, NamedArg, RecordType
-from .types import RecordTypeMeta, BoolType, Union, ListTypeMeta, DictTypeMeta
+from .types import TypeVarMeta, TypeVar, Func, NamedArg, Record
+from .types import RecordMeta, BoolType, Union, ListTypeMeta, DictTypeMeta
 from .types import TypingMeta, UnionMeta, Nothing, Option, VarArgs
-from .types import TypeTransformer, Output, VarNamedArgs, VarNamedArgsMeta
+from .types import TypeTransformer, Markup, VarNamedArgs, VarNamedArgsMeta
 from .utils import VarsGen
 from .constant import HTML_ELEMENTS
 
@@ -139,8 +139,8 @@ def unify(t1, t2):
             # not unified
         else:
             if isinstance(t1, type(t2)):
-                if isinstance(t1, RecordTypeMeta):
-                    if isinstance(t2, RecordTypeMeta):
+                if isinstance(t1, RecordMeta):
+                    if isinstance(t2, RecordMeta):
                         for key, value in t2.__items__.items():
                             if key in t1.__items__:
                                 unify(t1.__items__[key], value)
@@ -261,7 +261,7 @@ def check_arg(arg, type_, env):
 
 _StringLike = Union[Nothing, IntType, StringType]
 
-_OutputLike = Union[_StringLike, Output]
+_MarkupLike = Union[_StringLike, Markup]
 
 
 __var = VarsGen()
@@ -270,22 +270,22 @@ LET_TYPE = Func[[__var.pairs, VarArgs[__var.body]], __var.result]
 
 DEF_TYPE = Func[[__var.name, VarArgs[__var.body]], __var.result]
 
-GET_TYPE = Func[[RecordType[{}], __var.key], __var.result]
+GET_TYPE = Func[[Record[{}], __var.key], __var.result]
 
 IF1_TYPE = Func[[BoolType, __var.then_], __var.result]
 IF2_TYPE = Func[[BoolType, __var.then_, __var.else_], __var.result]
 
-EACH_TYPE = Func[[__var.symbol, ListType[__var.item], VarArgs[_OutputLike]],
-                 Output]
+EACH_TYPE = Func[[__var.symbol, ListType[__var.item], VarArgs[_MarkupLike]],
+                 Markup]
 
 IF_SOME1_TYPE = Func[[__var.test, __var.then_], __var.result]
 IF_SOME2_TYPE = Func[[__var.test, __var.then_, __var.else_], __var.result]
 
-HTML_TAG_TYPE = Func[[VarNamedArgs[_StringLike], VarArgs[_OutputLike]],
-                     Output]
+HTML_TAG_TYPE = Func[[VarNamedArgs[_StringLike], VarArgs[_MarkupLike]],
+                     Markup]
 
-JOIN1_TYPE = Func[[ListType[_OutputLike]], Output]
-JOIN2_TYPE = Func[[StringType, ListType[_OutputLike]], Output]
+JOIN1_TYPE = Func[[ListType[_MarkupLike]], Markup]
+JOIN2_TYPE = Func[[StringType, ListType[_MarkupLike]], Markup]
 
 del __var
 
@@ -326,7 +326,7 @@ def check_get(fn_type, env, obj, attr):
     obj = check(obj, env)
     assert isinstance(attr, Symbol)
     if isinstance(obj.__type__, TypeVarMeta):
-        unify(obj.__type__, RecordType[{attr.name: TypeVar[None]}])
+        unify(obj.__type__, Record[{attr.name: TypeVar[None]}])
     try:
         result_type = get_type(obj).__items__[attr.name]
     except KeyError:
