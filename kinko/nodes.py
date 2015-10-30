@@ -34,12 +34,12 @@ class Symbol(Node):
 class String(Node):
 
     def __init__(self, value, **kw):
-        self.value = value
+        self.value = unicode(value)
         super(String, self).__init__(**kw)
 
     def __repr__(self):
         return '"{}"'.format(
-            repr(self.value)[1:-1]
+            repr(self.value)[2:-1]
             .replace('\\"', '"').replace("\\'", "'")
             .replace('"', '\\"')
         )

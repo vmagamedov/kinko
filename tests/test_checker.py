@@ -354,7 +354,7 @@ class TestChecker(ParseMixin, TestCase):
             each i collection
               inc i.attr
             """,
-            Tuple.typed(TypeVar[ListType[IntType]], [
+            Tuple.typed(Output, [
                 Symbol.typed(EACH_TYPE, 'each'),
                 Symbol.typed(rec_type, 'i'),
                 Symbol.typed(list_rec_type, 'collection'),

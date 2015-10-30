@@ -3,10 +3,13 @@ from itertools import chain
 
 import astor
 
+from .types import NamedArgMeta, VarArgsMeta, VarNamedArgsMeta
 from .nodes import String, Tuple, Symbol, List, Number, Placeholder
 from .nodes import NodeVisitor
 from .compat import ast as py, texttype
-from .checker import split_args
+from .checker import split_args, normalize_args, DEF_TYPE, HTML_TAG_TYPE
+from .checker import IF1_TYPE, IF2_TYPE, EACH_TYPE, JOIN1_TYPE, JOIN2_TYPE
+from .checker import GET_TYPE
 from .constant import HTML_ELEMENTS, SELF_CLOSING_ELEMENTS
 
 
@@ -54,10 +57,10 @@ def _returns_output_type(node):
 
 def _yield_writes(node):
     if _returns_output_type(node):
-        for item in compile_(node, True):
+        for item in compile_stmt(node):
             yield item
     else:
-        for item in compile_(node, True):
+        for item in compile_stmt(node):
             yield _write(item)
 
 
@@ -132,126 +135,203 @@ class _Optimizer(NodeTransformer):
         node.body = list(self._paste(node.body))
 
 
-def compile_(node, as_statement):
+def compile_if1_expr(node, test, then_):
+    test_expr = compile_expr(test)
+    then_expr = compile_expr(then_)
+    else_expr = py.Name('None', py.Load())
+    return py.IfExp(test_expr, then_expr, else_expr)
+
+
+def compile_if2_expr(node, test, then_, else_):
+    test_expr = compile_expr(test)
+    then_expr = compile_expr(then_)
+    else_expr = compile_expr(else_)
+    return py.IfExp(test_expr, then_expr, else_expr)
+
+
+def compile_get_expr(node, obj, attr):
+    obj_expr = compile_expr(obj)
+    return py.Attribute(obj_expr, attr.name, py.Load())
+
+
+EXPR_TYPES = {
+    IF1_TYPE: compile_if1_expr,
+    IF2_TYPE: compile_if2_expr,
+    GET_TYPE: compile_get_expr,
+}
+
+
+def compile_expr(node):
     if isinstance(node, Tuple):
         sym, args = node.values[0], node.values[1:]
+        assert sym.__type__
         pos_args, kw_args = split_args(args)
-        if sym.name == 'def':
-            assert as_statement
-            name_sym, body = pos_args
-            visitor = _PlaceholdersExtractor()
-            visitor.visit(body)
-            py_args = [py.arg(p) for p in visitor.placeholders]
-            yield py.FunctionDef(name_sym.name,
-                                 py.arguments(py_args, None, None, []),
-                                 list(compile_(body, as_statement)), [])
+        norm_args = normalize_args(sym.__type__, pos_args, kw_args)
+        proc = EXPR_TYPES[sym.__type__]
+        return proc(node, *norm_args)
 
-        elif sym.name in HTML_ELEMENTS:
-            assert as_statement
-            yield _write_str(u'<{}'.format(sym.name))
-            for key, value in kw_args.items():
-                yield _write_str(u' {}="'.format(key))
-                for item in _yield_writes(value):
-                    yield item
-                yield _write_str(u'"')
-            if sym.name in SELF_CLOSING_ELEMENTS:
-                yield _write_str(u'/>')
-                assert not pos_args, ('Positional args are not expected in the '
-                                      'self-closing elements')
-                return
-            else:
-                yield _write_str(u'>')
-            for arg in pos_args:
-                for item in _yield_writes(arg):
-                    yield item
-            yield _write_str(u'</{}>'.format(sym.name))
+    elif isinstance(node, Symbol):
+        return _ctx_load(node.name)
 
-        elif sym.name == 'if':
-            if kw_args:
-                test, = pos_args
-                then_, else_ = kw_args['then'], kw_args.get('else')
-            elif len(pos_args) == 3:
-                test, then_, else_ = pos_args
-            else:
-                (test, then_), else_ = pos_args, None
+    elif isinstance(node, Placeholder):
+        return py.Name(node.name, py.Load())
 
-            test_expr = compile_expr(test)
+    elif isinstance(node, String):
+        return py.Str(node.value)
 
-            if as_statement:
-                then_stmt = list(_yield_writes(then_))
-                else_stmt = list(_yield_writes(else_)) if else_ is not None \
-                    else []
-                yield py.If(test_expr, then_stmt, else_stmt)
-            else:
-                then_expr = compile_expr(then_)
-                # FIXME: implement custom none/null type or require "else"
-                # expression like in Python
-                else_expr = compile_expr(else_) if else_ is not None \
-                    else py.Name('None', py.Load())
-                yield py.IfExp(test_expr, then_expr, else_expr)
+    elif isinstance(node, Number):
+        return py.Num(node.value)
 
-        elif sym.name == 'each':
-            assert as_statement
-            var, col, body = pos_args
-            yield py.For(_ctx_store(var.name), _ctx_load(col.name),
-                         list(compile_(body, as_statement)), [])
+    else:
+        raise TypeError('Unable to compile {!r} of type {!r} as expression'
+                        .format(node, type(node)))
 
-        elif sym.name == 'join':
-            assert as_statement
-            if len(pos_args) == 1:
-                separator, (collection,) = None, pos_args
-            else:
-                separator, collection = pos_args
-            for i, value in enumerate(collection.values):
-                if i and separator is not None:
-                    yield _write_str(separator.value)
-                for item in _yield_writes(value):
-                    yield item
 
-        elif sym.name == 'get':
-            obj, attr = pos_args
-            obj_expr = compile_expr(obj)
-            yield py.Attribute(obj_expr, attr.name, py.Load())
+def _chain_map(fn, iterable):
+    return list(chain.from_iterable(map(fn, iterable)))
 
+
+def compile_def_stmt(node, name_sym, body):
+    py_args = [py.arg(a.__arg_name__)
+               for a in node.__type__.__instance__.__args__]
+    yield py.FunctionDef(name_sym.name,
+                         py.arguments(py_args, None, None, []),
+                         _chain_map(compile_stmt, body), [])
+
+
+def compile_html_tag_stmt(node, attrs, body):
+    tag_name = node.values[0].name
+    yield _write_str(u'<{}'.format(tag_name))
+    for key, value in attrs.items():
+        yield _write_str(u' {}="'.format(key))
+        for item in _yield_writes(value):
+            yield item
+        yield _write_str(u'"')
+    if tag_name in SELF_CLOSING_ELEMENTS:
+        yield _write_str(u'/>')
+        assert not body, ('Positional args are not expected in the '
+                          'self-closing elements')
+        return
+    else:
+        yield _write_str(u'>')
+    for arg in body:
+        for item in _yield_writes(arg):
+            yield item
+    yield _write_str(u'</{}>'.format(tag_name))
+
+
+def compile_if1_stmt(node, test, then_):
+    test_expr = compile_expr(test)
+    yield py.If(test_expr, list(_yield_writes(then_)), [])
+
+
+def compile_if2_stmt(node, test, then_, else_):
+    test_expr = compile_expr(test)
+    yield py.If(test_expr, list(_yield_writes(then_)), list(_yield_writes(else_)))
+
+
+def compile_each_stmt(node, var, col, body):
+    yield py.For(_ctx_store(var.name), _ctx_load(col.name),
+                 _chain_map(compile_stmt, body), [])
+
+
+def compile_join1_stmt(node, col):
+    for value in col.values:
+        for item in _yield_writes(value):
+            yield item
+
+
+def compile_join2_stmt(node, sep, col):
+    for i, value in enumerate(col.values):
+        if i:
+            yield _write_str(sep.value)
+        for item in _yield_writes(value):
+            yield item
+
+
+def compile_get_stmt(node, obj, attr):
+    obj_expr = compile_expr(obj)
+    yield py.Attribute(obj_expr, attr.name, py.Load())
+
+
+STMT_TYPES = {
+    DEF_TYPE: compile_def_stmt,
+    HTML_TAG_TYPE: compile_html_tag_stmt,
+    IF1_TYPE: compile_if1_stmt,
+    IF2_TYPE: compile_if2_stmt,
+    EACH_TYPE: compile_each_stmt,
+    JOIN1_TYPE: compile_join1_stmt,
+    JOIN2_TYPE: compile_join2_stmt,
+    GET_TYPE: compile_get_stmt,
+}
+
+
+def compile_func_stmt(node, *norm_args):
+    sym = node.values[0]
+
+    pos_args, kw_args = [], {}
+    for arg_type, arg_value in zip(sym.__type__.__args__, norm_args):
+        if isinstance(arg_type, NamedArgMeta):
+            kw_args[arg_type.__arg_name__] = (arg_type.__arg_type__, arg_value)
+        elif isinstance(arg_type, VarArgsMeta):
+            pos_args.extend((arg_type.__arg_type__, v) for v in arg_value)
+        elif isinstance(arg_type, VarNamedArgsMeta):
+            kw_args.update({key: (arg_type.__arg_type__, value)
+                            for key, value in arg_value.items()})
         else:
-            if sym.ns:
-                if sym.ns == '.':
-                    name_expr = py.Name(sym.rel, py.Load())
-                else:
-                    name_expr = py.Name('.'.join([sym.ns, sym.rel]), py.Load())
-            else:
-                name_expr = py.Attribute(py.Name('builtins', py.Load()),
-                                         sym.name, py.Load())
+            pos_args.append((arg_type, arg_value))
 
-            kw_arg_exprs = []
-            for key, value in kw_args.items():
-                if _returns_output_type(value):
-                    yield _buf_push()
-                    for item in _yield_writes(value):
-                        yield item
-                    kw_arg_exprs.append(py.keyword(key, _buf_pop()))
-                else:
-                    kw_arg_exprs.append(py.keyword(key, compile_expr(value)))
+    if sym.ns:
+        if sym.ns == '.':
+            name_expr = py.Name(sym.rel, py.Load())
+        else:
+            name_expr = py.Name('.'.join([sym.ns, sym.rel]), py.Load())
+    else:
+        name_expr = py.Attribute(py.Name('builtins', py.Load()),
+                                 sym.name, py.Load())
 
-            pos_arg_exprs = []
-            # capturing args in reversed order to preserve proper ordering
-            # during second reverse
-            for value in reversed(pos_args):
-                if _returns_output_type(value):
-                    yield _buf_push()
-                    for item in _yield_writes(value):
-                        yield item
-                    pos_arg_exprs.append(_buf_pop())
-                else:
-                    pos_arg_exprs.append(compile_expr(value))
+    kw_arg_exprs = []
+    for key, (type_, value) in kw_args.items():
+        if _returns_output_type(value):
+            yield _buf_push()
+            for item in _yield_writes(value):
+                yield item
+            kw_arg_exprs.append(py.keyword(key, _buf_pop()))
+        else:
+            kw_arg_exprs.append(py.keyword(key, compile_expr(value)))
 
-            # applying args in reversed order to preserve pushes/pops
-            # consistency
-            py_call = py.Call(name_expr,
-                              pos_arg_exprs[::-1],
-                              kw_arg_exprs[::-1],
-                              None, None)
-            yield (py.Expr(py_call) if sym.ns else py_call)
+    pos_arg_exprs = []
+    # capturing args in reversed order to preserve proper ordering
+    # during second reverse
+    for type_, value in reversed(pos_args):
+        if _returns_output_type(value):
+            yield _buf_push()
+            for item in _yield_writes(value):
+                yield item
+            pos_arg_exprs.append(_buf_pop())
+        else:
+            pos_arg_exprs.append(compile_expr(value))
+
+    # applying args in reversed order to preserve pushes/pops
+    # consistency
+    py_call = py.Call(name_expr,
+                      pos_arg_exprs[::-1],
+                      kw_arg_exprs[::-1],
+                      None, None)
+    yield (py.Expr(py_call) if sym.ns else py_call)
+
+
+def compile_stmt(node):
+    if isinstance(node, Tuple):
+        sym, args = node.values[0], node.values[1:]
+        assert sym.__type__
+
+        pos_args, kw_args = split_args(args)
+        norm_args = normalize_args(sym.__type__, pos_args, kw_args)
+
+        proc = STMT_TYPES.get(sym.__type__, compile_func_stmt)
+        for item in proc(node, *norm_args):
+            yield item
 
     elif isinstance(node, Symbol):
         yield _ctx_load(node.name)
@@ -266,20 +346,13 @@ def compile_(node, as_statement):
         yield py.Num(node.value)
 
     else:
-        raise TypeError('Unable to compile {!r} of type {!r}'
+        raise TypeError('Unable to compile {!r} of type {!r} as statement'
                         .format(node, type(node)))
-
-
-def compile_expr(node):
-    compiled, = list(compile_(node, False))
-    return compiled
 
 
 def compile_module(body):
     assert isinstance(body, List), repr(body)
-    mod = py.Module(list(chain.from_iterable(
-        compile_(n, True) for n in body.values
-    )))
+    mod = py.Module(_chain_map(compile_stmt, body.values))
     mod = _Optimizer().visit(mod)
     py.fix_missing_locations(mod)
     return mod

@@ -17,6 +17,10 @@ class KinkoTypeError(TypeError):
     pass
 
 
+class SignatureMismatch(TypeError):
+    pass
+
+
 class Environ(object):
 
     def __init__(self, defs=None):
@@ -182,42 +186,50 @@ def split_args(args):
         return _pos_args, _kw_args
 
 
-def match_fn(fn_types, args):
-    _pos_args, _kw_args = split_args(args)
-
-    for fn_type in fn_types:
-        norm_args = []
-        pos_args, kw_args = _pos_args[:], _kw_args.copy()
-        missing_arg = False
-        for arg_type in fn_type.__args__:
-            if isinstance(arg_type, NamedArgMeta):
-                try:
-                    value = kw_args.pop(arg_type.__arg_name__)
-                except KeyError:
-                    missing_arg = True
-                    break
-                else:
-                    norm_args.append(value)
-            elif isinstance(arg_type, VarArgsMeta):
-                norm_args.append(list(pos_args))
-                del pos_args[:]
-            elif isinstance(arg_type, VarNamedArgsMeta):
-                norm_args.append(kw_args.copy())
-                kw_args.clear()
+def normalize_args(fn_type, pos_args, kw_args):
+    pos_args, kw_args = list(pos_args), dict(kw_args)
+    norm_args = []
+    missing_arg = False
+    for arg_type in fn_type.__args__:
+        if isinstance(arg_type, NamedArgMeta):
+            try:
+                value = kw_args.pop(arg_type.__arg_name__)
+            except KeyError:
+                missing_arg = True
+                break
             else:
-                try:
-                    value = pos_args.pop(0)
-                except IndexError:
-                    missing_arg = True
-                    break
-                else:
-                    norm_args.append(value)
-        if pos_args or kw_args or missing_arg:
+                norm_args.append(value)
+        elif isinstance(arg_type, VarArgsMeta):
+            norm_args.append(list(pos_args))
+            del pos_args[:]
+        elif isinstance(arg_type, VarNamedArgsMeta):
+            norm_args.append(kw_args.copy())
+            kw_args.clear()
+        else:
+            try:
+                value = pos_args.pop(0)
+            except IndexError:
+                missing_arg = True
+                break
+            else:
+                norm_args.append(value)
+    if pos_args or kw_args or missing_arg:
+        raise SignatureMismatch
+    else:
+        return norm_args
+
+
+def match_fn(fn_types, args):
+    pos_args, kw_args = split_args(args)
+    for fn_type in fn_types:
+        try:
+            norm_args = normalize_args(fn_type, pos_args, kw_args)
+        except SignatureMismatch:
             continue
         else:
             return fn_type, norm_args
     else:
-        raise KinkoTypeError('Function signature didn\'t matches')
+        raise KinkoTypeError('Function signature mismatch')
 
 
 def restore_args(fn_type, norm_args):
@@ -258,15 +270,16 @@ GET_TYPE = Func[[RecordType[{}], __var.key], __var.result]
 IF1_TYPE = Func[[BoolType, __var.then_], __var.result]
 IF2_TYPE = Func[[BoolType, __var.then_, __var.else_], __var.result]
 
-EACH_TYPE = Func[[__var.symbol, ListType[__var.item], VarArgs[__var.body]],
-                 __var.result]
+EACH_TYPE = Func[[__var.symbol, ListType[__var.item], VarArgs[Output]],
+                 Output]
 
 IF_SOME1_TYPE = Func[[__var.test, __var.then_], __var.result]
 IF_SOME2_TYPE = Func[[__var.test, __var.then_, __var.else_], __var.result]
 
-HTML_TAG_TYPE = Func[[VarNamedArgs[StringType], VarArgs[Output]], Output]
+HTML_TAG_TYPE = Func[[VarNamedArgs[Output], VarArgs[Output]], Output]
 
-JOIN_TYPE = Func[[VarArgs[Output]], Output]
+JOIN1_TYPE = Func[[ListType[Output]], Output]
+JOIN2_TYPE = Func[[Output, ListType[Output]], Output]
 
 del __var
 
@@ -342,7 +355,6 @@ def check_each(fn_type, env, var, col, body):
     var = Symbol.typed(get_type(col).__item_type__, var.name)
     with env.push({var.name: var.__type__}):
         body = [check(item, env) for item in body]
-    unify(fn_type.__result__, ListType[body[-1].__type__])
     return var, col, body
 
 
@@ -389,7 +401,7 @@ BUILTINS = {
     'if': [IF1_TYPE, IF2_TYPE],
     'each': [EACH_TYPE],
     'if-some': [IF_SOME1_TYPE, IF_SOME2_TYPE],
-    'join': [JOIN_TYPE],
+    'join': [JOIN1_TYPE, JOIN2_TYPE],
 }
 for tag_name in HTML_ELEMENTS:
     BUILTINS[tag_name] = [HTML_TAG_TYPE]
