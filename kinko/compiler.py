@@ -3,14 +3,15 @@ from itertools import chain
 
 import astor
 
-from .types import NamedArgMeta, VarArgsMeta, VarNamedArgsMeta
+from .types import NamedArgMeta, VarArgsMeta, VarNamedArgsMeta, MarkupMeta
+from .types import UnionMeta
 from .nodes import String, Tuple, Symbol, List, Number, Placeholder
 from .nodes import NodeVisitor
 from .compat import ast as py, texttype
 from .checker import split_args, normalize_args, DEF_TYPE, HTML_TAG_TYPE
 from .checker import IF1_TYPE, IF2_TYPE, EACH_TYPE, JOIN1_TYPE, JOIN2_TYPE
-from .checker import GET_TYPE
-from .constant import HTML_ELEMENTS, SELF_CLOSING_ELEMENTS
+from .checker import GET_TYPE, get_type
+from .constant import SELF_CLOSING_ELEMENTS
 
 
 def _write(value):
@@ -45,23 +46,24 @@ def _buf_pop():
                    [], [], None, None)
 
 
-def _returns_output_type(node):
-    # FIXME: temporary hack before we will have working types system
-    return (
-        isinstance(node, Tuple) and
-        (node.values[0].name in {'each', 'if', 'join'} or
-         node.values[0].name in HTML_ELEMENTS or
-         node.values[0].ns)
-    )
+def _returns_markup(node):
+    type_ = get_type(node)
+
+    def recur_check(t):
+        if isinstance(t, UnionMeta):
+            return any(recur_check(st) for st in t.__types__)
+        else:
+            return isinstance(t, MarkupMeta)
+
+    return recur_check(type_)
 
 
 def _yield_writes(node):
-    if _returns_output_type(node):
+    if _returns_markup(node):
         for item in compile_stmt(node):
             yield item
     else:
-        for item in compile_stmt(node):
-            yield _write(item)
+        yield _write(compile_expr(node))
 
 
 class _PlaceholdersExtractor(NodeVisitor):
@@ -154,6 +156,24 @@ def compile_get_expr(node, obj, attr):
     return py.Attribute(obj_expr, attr.name, py.Load())
 
 
+def compile_func_expr(node, *norm_args):
+    sym, args = node.values[0], node.values[1:]
+    pos_args, kw_args = split_args(args)
+
+    name_expr = py.Attribute(py.Name('builtins', py.Load()),
+                             sym.name, py.Load())
+
+    pos_arg_exprs = []
+    for value in pos_args:
+        pos_arg_exprs.append(compile_expr(value))
+
+    kw_arg_exprs = []
+    for key, value in kw_args.items():
+        kw_arg_exprs.append(py.keyword(key, compile_expr(value)))
+
+    return py.Call(name_expr, pos_arg_exprs, kw_arg_exprs, None, None)
+
+
 EXPR_TYPES = {
     IF1_TYPE: compile_if1_expr,
     IF2_TYPE: compile_if2_expr,
@@ -167,7 +187,7 @@ def compile_expr(node):
         assert sym.__type__
         pos_args, kw_args = split_args(args)
         norm_args = normalize_args(sym.__type__, pos_args, kw_args)
-        proc = EXPR_TYPES[sym.__type__]
+        proc = EXPR_TYPES.get(sym.__type__, compile_func_expr)
         return proc(node, *norm_args)
 
     elif isinstance(node, Symbol):
@@ -204,8 +224,7 @@ def compile_html_tag_stmt(node, attrs, body):
     yield _write_str(u'<{}'.format(tag_name))
     for key, value in attrs.items():
         yield _write_str(u' {}="'.format(key))
-        for item in _yield_writes(value):
-            yield item
+        yield _write(compile_expr(value))
         yield _write_str(u'"')
     if tag_name in SELF_CLOSING_ELEMENTS:
         yield _write_str(u'/>')
@@ -292,7 +311,7 @@ def compile_func_stmt(node, *norm_args):
 
     kw_arg_exprs = []
     for key, (type_, value) in kw_args.items():
-        if _returns_output_type(value):
+        if _returns_markup(value):
             yield _buf_push()
             for item in _yield_writes(value):
                 yield item
@@ -304,7 +323,7 @@ def compile_func_stmt(node, *norm_args):
     # capturing args in reversed order to preserve proper ordering
     # during second reverse
     for type_, value in reversed(pos_args):
-        if _returns_output_type(value):
+        if _returns_markup(value):
             yield _buf_push()
             for item in _yield_writes(value):
                 yield item
@@ -334,16 +353,16 @@ def compile_stmt(node):
             yield item
 
     elif isinstance(node, Symbol):
-        yield _ctx_load(node.name)
+        yield _write(_ctx_load(node.name))
 
     elif isinstance(node, Placeholder):
-        yield py.Name(node.name, py.Load())
+        yield _write(py.Name(node.name, py.Load()))
 
     elif isinstance(node, String):
-        yield py.Str(node.value)
+        yield _write(py.Str(node.value))
 
     elif isinstance(node, Number):
-        yield py.Num(node.value)
+        yield _write(py.Num(node.value))
 
     else:
         raise TypeError('Unable to compile {!r} of type {!r} as statement'

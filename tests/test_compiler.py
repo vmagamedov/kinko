@@ -174,6 +174,7 @@ class TestCompile(ParseMixin, TestCase):
         )
 
     def testIf(self):
+        # FIXME: implement these signatures
         # self.assertCompiles(
         #     u"""
         #     if 1
@@ -214,12 +215,12 @@ class TestCompile(ParseMixin, TestCase):
             u"""
             div
               if (if 1 "true" "false")
-                "Trueish"
+                span "Trueish"
             """,
             u"""
             buf.write('<div>')
             if ('true' if 1 else 'false'):
-                buf.write('Trueish')
+                buf.write('<span>Trueish</span>')
             buf.write('</div>')
             """,
         )
@@ -227,12 +228,12 @@ class TestCompile(ParseMixin, TestCase):
             u"""
             div
               if (if 1 "true")
-                "Trueish"
+                span "Trueish"
             """,
             u"""
             buf.write('<div>')
             if ('true' if 1 else None):
-                buf.write('Trueish')
+                buf.write('<span>Trueish</span>')
             buf.write('</div>')
             """,
         )
