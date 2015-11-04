@@ -8,6 +8,8 @@ try:
 except ImportError:
     from mock import Mock
 
+from kinko.refs import RecordField, NamedArgument, ContextVariable, ListItem
+from kinko.refs import resolve, Apply, RefsCollector
 from kinko.utils import Buffer
 from kinko.types import StringType, ListType, VarNamedArgs, Func, Record
 from kinko.types import IntType, Union, Markup, NamedArg
@@ -278,3 +280,63 @@ class TestCompile(ParseMixin, TestCase):
             content,
             u"<div><div>1</div><div>2</div><div>Привет</div></div>",
         )
+
+    def testRequirements(self):
+        node = self.parse(u"""
+        def baz
+          div #b.count
+
+        def bar
+          span (get #a name)
+          span y
+          baz :b #a
+
+        def foo
+          div
+            each i x
+              bar :a i
+        """)
+        node = check(node, Environ({
+            'x': ListType[Record[{'name': StringType,
+                                  'count': IntType}]],
+            'y': StringType,
+        }))
+
+        baz = node.values[0]
+        baz_getcount = baz.values[2].values[1]
+        baz_getcount.__type__.__ref__ = RecordField(NamedArgument('b'), 'count')
+
+        bar = node.values[1]
+        bar_join = bar.values[2]
+        bar_getname = bar_join.values[1].values[0].values[1]
+        bar_getname.__type__.__instance__.__ref__ = \
+            RecordField(NamedArgument('a'), 'name')
+        bar_getname_a = bar_getname.values[1]
+        bar_getname_a.__type__.__ref__ = NamedArgument('a')
+        bar_y = bar_join.values[1].values[1].values[1]
+        bar_y.__type__.__ref__ = ContextVariable('y')
+
+        foo = node.values[2]
+        foo_div = foo.values[2]
+        foo_each = foo_div.values[1]
+        foo_i = foo_each.values[1]
+        foo_i.__type__.__ref__ = ListItem(ContextVariable('x'))
+        foo_x = foo_each.values[2]
+        foo_x.__type__.__ref__ = ContextVariable('x')
+
+        foo_v = RefsCollector()
+        foo_v.visit(foo)
+        print(foo_v.refs)
+
+        bar_v = RefsCollector()
+        bar_v.visit(bar)
+        print(bar_v.refs)
+
+        baz_v = RefsCollector()
+        baz_v.visit(baz)
+        print(baz_v.refs)
+
+        all_refs = {'foo': foo_v.refs, 'bar': bar_v.refs, 'baz': baz_v.refs}
+        print(list(resolve(all_refs, Apply('foo', [], {}), [], {})))
+
+        # 1/0

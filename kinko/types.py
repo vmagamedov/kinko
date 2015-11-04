@@ -2,6 +2,7 @@ from .compat import with_metaclass
 
 
 class GenericMeta(type):
+    __ref__ = None
 
     def __repr__(cls):
         return cls.__name__
