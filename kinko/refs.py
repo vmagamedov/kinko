@@ -1,6 +1,6 @@
 from .nodes import NodeVisitor
 from .types import TypeVarMeta
-from .checker import split_args
+from .utils import split_args
 
 
 class Reference(object):

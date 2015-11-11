@@ -1,5 +1,6 @@
 import io
 
+from .nodes import Keyword
 from .types import TypeVar
 from .compat import texttype
 
@@ -28,3 +29,22 @@ class VarsGen(object):
         if name not in self.vars:
             self.vars[name] = TypeVar[None]
         return self.vars[name]
+
+
+def split_args(args):
+    _pos_args, _kw_args = [], {}
+    i = iter(args)
+    try:
+        while True:
+            arg = next(i)
+            if isinstance(arg, Keyword):
+                try:
+                    val = next(i)
+                except StopIteration:
+                    raise TypeError('Missing named argument value')
+                else:
+                    _kw_args[arg.name] = val
+            else:
+                _pos_args.append(arg)
+    except StopIteration:
+        return _pos_args, _kw_args

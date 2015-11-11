@@ -1,39 +1,11 @@
-from unittest import TestCase
-try:
-    from unittest.mock import patch
-except ImportError:
-    from mock import patch
-
 from funcparserlib.parser import NoParseError
 
-from kinko.nodes import Node, Symbol, Tuple, String, Number, Keyword, Dict, List
+from kinko.nodes import Symbol, Tuple, String, Number, Keyword, Dict, List
 from kinko.nodes import Placeholder, NodeVisitor
 from kinko.parser import parser
 
+from .base import TestCase, node_eq_patcher
 from .test_tokenizer import TokenizeMixin
-
-
-def node_eq(self, other):
-    if type(self) is not type(other):
-        return False
-    d1 = dict(self.__dict__)
-    d1.pop('location', None)
-    t1 = d1.pop('__type__', None)
-    d2 = dict(other.__dict__)
-    d2.pop('location', None)
-    t2 = d2.pop('__type__', None)
-    if d1 == d2:
-        if t1 == t2:
-            return True
-        else:
-            raise AssertionError('Types mismatch {!r} != {!r} for expression '
-                                 '`{!r}`'.format(t1, t2, self))
-    else:
-        return False
-
-
-def node_ne(self, other):
-    return not self.__eq__(other)
 
 
 class LocationChecker(NodeVisitor):
@@ -58,13 +30,7 @@ class ParseMixin(TokenizeMixin):
 
 
 class TestParser(ParseMixin, TestCase):
-
-    def setUp(self):
-        self.node_patcher = patch.multiple(Node, __eq__=node_eq, __ne__=node_ne)
-        self.node_patcher.start()
-
-    def tearDown(self):
-        self.node_patcher.stop()
+    ctx = [node_eq_patcher]
 
     def assertParse(self, src, node):
         return self.assertEqual(self.parse(src), node)

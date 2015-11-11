@@ -1,71 +1,28 @@
-from unittest import TestCase
-try:
-    from unittest.mock import patch
-except ImportError:
-    from mock import patch
-
-from kinko.nodes import Tuple, Symbol, Number, Node, Keyword, List, Placeholder
+from kinko.nodes import Tuple, Symbol, Number, Keyword, List, Placeholder
 from kinko.nodes import String
 from kinko.types import Func, IntType, StringType, NamedArg, TypeVar, Markup
 from kinko.types import Record, ListType, Union, DictType, Option
-from kinko.types import GenericMeta, VarArgs, VarNamedArgs
-from kinko.checker import Environ, check, split_args, KinkoTypeError, EACH_TYPE
+from kinko.types import VarArgs, VarNamedArgs
+from kinko.checker import Environ, check, KinkoTypeError, EACH_TYPE
 from kinko.checker import LET_TYPE, DEF_TYPE, GET_TYPE, IF2_TYPE, IF_SOME1_TYPE
 from kinko.checker import unify, NamesResolver, DefsMappingVisitor, Unchecked
 from kinko.checker import match_fn, restore_args, HTML_TAG_TYPE
 
-from .test_parser import node_eq, node_ne, ParseMixin
-
-
-def type_eq(self, other):
-    if type(self) is not type(other):
-        return False
-    d1 = dict(self.__dict__)
-    d1.pop('__dict__')
-    d1.pop('__weakref__')
-    d2 = dict(other.__dict__)
-    d2.pop('__dict__')
-    d2.pop('__weakref__')
-    return d1 == d2
-
-
-def type_ne(self, other):
-    return not self.__eq__(other)
+from .base import TestCase, node_eq_patcher, type_eq_patcher
+from .test_parser import ParseMixin
 
 
 class TestChecker(ParseMixin, TestCase):
+    ctx = [node_eq_patcher, type_eq_patcher]
 
     def parse_expr(self, src):
         return self.parse(src).values[0]
-
-    def setUp(self):
-        self.node_patcher = patch.multiple(Node, __eq__=node_eq, __ne__=node_ne)
-        self.node_patcher.start()
-        self.type_patcher = patch.multiple(GenericMeta,
-                                           __eq__=type_eq, __ne__=type_ne)
-        self.type_patcher.start()
-
-    def tearDown(self):
-        self.type_patcher.stop()
-        self.node_patcher.stop()
 
     def check(self, src, env=None):
         return check(self.parse_expr(src), Environ(env))
 
     def assertChecks(self, src, typed, extra_env=None):
         self.assertEqual(self.check(src, extra_env), typed)
-
-    def testSplitArgs(self):
-        self.assertEqual(
-            split_args([Number(1), Number(2), Keyword('foo'), Number(3)]),
-            ([Number(1), Number(2)], {'foo': Number(3)}),
-        )
-        self.assertEqual(
-            split_args([Keyword('foo'), Number(1), Number(2), Number(3)]),
-            ([Number(2), Number(3)], {'foo': Number(1)}),
-        )
-        with self.assertRaises(TypeError):
-            split_args([Number(1), Keyword('foo')])
 
     def testMatchFn(self):
         # basic args

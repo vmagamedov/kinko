@@ -9,7 +9,7 @@ from .types import TypeVarMeta, TypeVar, Func, NamedArg, Record
 from .types import RecordMeta, BoolType, Union, ListTypeMeta, DictTypeMeta
 from .types import TypingMeta, UnionMeta, Nothing, Option, VarArgs
 from .types import TypeTransformer, Markup, VarNamedArgs, VarNamedArgsMeta
-from .utils import VarsGen
+from .utils import VarsGen, split_args
 from .constant import HTML_ELEMENTS
 
 
@@ -165,25 +165,6 @@ def unify(t1, t2):
 
         raise KinkoTypeError('Unexpected type: {!r}, instead of: {!r}'
                              .format(t1, t2))
-
-
-def split_args(args):
-    _pos_args, _kw_args = [], {}
-    i = iter(args)
-    try:
-        while True:
-            arg = next(i)
-            if isinstance(arg, Keyword):
-                try:
-                    val = next(i)
-                except StopIteration:
-                    raise KinkoTypeError('Missing named argument value')
-                else:
-                    _kw_args[arg.name] = val
-            else:
-                _pos_args.append(arg)
-    except StopIteration:
-        return _pos_args, _kw_args
 
 
 def normalize_args(fn_type, pos_args, kw_args):

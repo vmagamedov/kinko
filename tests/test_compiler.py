@@ -1,12 +1,6 @@
 # encoding: utf-8
 import difflib
 from textwrap import dedent
-from unittest import TestCase
-
-try:
-    from unittest.mock import Mock
-except ImportError:
-    from mock import Mock
 
 from kinko.refs import NamedArgRef, RecordRef, RecordFieldRef, ScalarRef
 from kinko.refs import ListItemRef, ListRef, RefsCollector, resolve_refs
@@ -18,6 +12,7 @@ from kinko.compat import _exec_in, PY3
 from kinko.checker import check, Environ
 from kinko.compiler import compile_module, dumps
 
+from .base import TestCase, Mock
 from .test_parser import ParseMixin
 
 
