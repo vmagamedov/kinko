@@ -8,8 +8,9 @@ try:
 except ImportError:
     from mock import Mock
 
-from kinko.refs import RecordField, NamedArgument, ContextVariable, ListItem
-from kinko.refs import resolve, Apply, RefsCollector
+from kinko.refs import NamedArgRef, RecordRef, RecordFieldRef, ScalarRef
+from kinko.refs import ListItemRef, ListRef, RefsCollector, resolve_refs
+from kinko.query import gen_query
 from kinko.utils import Buffer
 from kinko.types import StringType, ListType, VarNamedArgs, Func, Record
 from kinko.types import IntType, Union, Markup, NamedArg
@@ -304,25 +305,31 @@ class TestCompile(ParseMixin, TestCase):
 
         baz = node.values[0]
         baz_getcount = baz.values[2].values[1]
-        baz_getcount.__type__.__ref__ = RecordField(NamedArgument('b'), 'count')
+        baz_getcount.__type__.__ref__ = \
+            ScalarRef(RecordFieldRef(RecordRef(NamedArgRef('b')), 'count'))
 
         bar = node.values[1]
         bar_join = bar.values[2]
         bar_getname = bar_join.values[1].values[0].values[1]
         bar_getname.__type__.__instance__.__ref__ = \
-            RecordField(NamedArgument('a'), 'name')
+            ScalarRef(RecordFieldRef(RecordRef(NamedArgRef('a')), 'name'))
+
         bar_getname_a = bar_getname.values[1]
-        bar_getname_a.__type__.__ref__ = NamedArgument('a')
+        bar_getname_a.__type__.__ref__ = RecordRef(NamedArgRef('a'))
         bar_y = bar_join.values[1].values[1].values[1]
-        bar_y.__type__.__ref__ = ContextVariable('y')
+        bar_y.__type__.__ref__ = ScalarRef(RecordFieldRef(None, 'y'))
+
+        bar_baz = bar_join.values[1].values[2]
+        bar_baz.values[2].__type__.__ref__ = RecordRef(NamedArgRef('a'))
 
         foo = node.values[2]
         foo_div = foo.values[2]
         foo_each = foo_div.values[1]
         foo_i = foo_each.values[1]
-        foo_i.__type__.__ref__ = ListItem(ContextVariable('x'))
+        foo_i.__type__.__ref__ = \
+            RecordRef(ListItemRef(ListRef(RecordFieldRef(None, 'x'))))
         foo_x = foo_each.values[2]
-        foo_x.__type__.__ref__ = ContextVariable('x')
+        foo_x.__type__.__ref__ = ListRef(RecordFieldRef(None, 'x'))
 
         foo_v = RefsCollector()
         foo_v.visit(foo)
@@ -337,6 +344,9 @@ class TestCompile(ParseMixin, TestCase):
         print(baz_v.refs)
 
         all_refs = {'foo': foo_v.refs, 'bar': bar_v.refs, 'baz': baz_v.refs}
-        print(list(resolve(all_refs, Apply('foo', [], {}), [], {})))
+        refs = resolve_refs(all_refs, 'foo')
+        print(refs)
+
+        print(gen_query(refs))
 
         # 1/0

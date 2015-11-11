@@ -3,16 +3,90 @@ from kinko.types import TypeVarMeta
 from kinko.checker import split_args
 
 
-class ContextVariable(object):
+class Reference(object):
 
-    def __init__(self, name):
+    def __init__(self, backref):
+        self.backref = backref
+
+    def accept(self, visitor):
+        raise NotImplementedError
+
+
+class ScalarRef(Reference):
+
+    def __repr__(self):
+        return '{!r} > scalar'.format(self.backref)
+
+    def accept(self, visitor):
+        return visitor.visit_scalar(self)
+
+
+class ListRef(Reference):
+
+    def __repr__(self):
+        return '{!r} > list'.format(self.backref)
+
+    def accept(self, visitor):
+        return visitor.visit_list(self)
+
+
+class ListItemRef(Reference):
+
+    def __repr__(self):
+        return '{!r} > []'.format(self.backref)
+
+    def accept(self, visitor):
+        return visitor.visit_listitem(self)
+
+
+class RecordRef(Reference):
+
+    def __repr__(self):
+        return '{!r} > record'.format(self.backref) if self.backref else 'ctx'
+
+    def accept(self, visitor):
+        return visitor.visit_record(self)
+
+
+class RecordFieldRef(Reference):
+
+    def __init__(self, backref, name):
+        super(RecordFieldRef, self).__init__(backref)
         self.name = name
 
     def __repr__(self):
-        return self.name
+        if self.backref:
+            return '{!r} > [{!r}]'.format(self.backref, self.name)
+        else:
+            return 'ctx > [{!r}]'.format(self.name)
+
+    def accept(self, visitor):
+        return visitor.visit_recordfield(self)
 
 
-class PositionalArgument(object):
+class ReferenceVisitor(object):
+
+    def visit(self, ref):
+        if ref is not None:
+            ref.accept(self)
+
+    def visit_scalar(self, ref):
+        self.visit(ref.backref)
+
+    def visit_list(self, ref):
+        self.visit(ref.backref)
+
+    def visit_listitem(self, ref):
+        self.visit(ref.backref)
+
+    def visit_record(self, ref):
+        self.visit(ref.backref)
+
+    def visit_recordfield(self, ref):
+        self.visit(ref.backref)
+
+
+class PosArgRef(object):
 
     def __init__(self, pos):
         self.pos = pos
@@ -20,8 +94,11 @@ class PositionalArgument(object):
     def __repr__(self):
         return "#{}".format(self.pos)
 
+    def accept(self, visitor):
+        return visitor.visit_posarg(self)
 
-class NamedArgument(object):
+
+class NamedArgRef(object):
 
     def __init__(self, name):
         self.name = name
@@ -29,24 +106,8 @@ class NamedArgument(object):
     def __repr__(self):
         return "#{}".format(self.name)
 
-
-class ListItem(object):
-
-    def __init__(self, of):
-        self.of = of
-
-    def __repr__(self):
-        return "{!r}[]".format(self.of)
-
-
-class RecordField(object):
-
-    def __init__(self, of, name):
-        self.of = of
-        self.name = name
-
-    def __repr__(self):
-        return "{!r}.{}".format(self.of, self.name)
+    def accept(self, visitor):
+        return visitor.visit_namedarg(self)
 
 
 class Apply(object):
@@ -60,29 +121,52 @@ class Apply(object):
         return "(apply {} {!r} {!r})".format(self.func, self.args, self.kwargs)
 
 
-def _resolve_one(env, obj, args, kwargs):
-    resolved_obj, = resolve(env, obj, args, kwargs)
-    return resolved_obj
+class ArgsResolver(object):
+
+    def __init__(self, args, kwargs):
+        self.args = args
+        self.kwargs = kwargs
+
+    def visit(self, ref):
+        if ref is not None:
+            return ref.accept(self)
+
+    def visit_scalar(self, ref):
+        return ScalarRef(self.visit(ref.backref))
+
+    def visit_list(self, ref):
+        return ListRef(self.visit(ref.backref))
+
+    def visit_listitem(self, ref):
+        return ListItemRef(self.visit(ref.backref))
+
+    def visit_record(self, ref):
+        return RecordRef(self.visit(ref.backref))
+
+    def visit_recordfield(self, ref):
+        return RecordFieldRef(self.visit(ref.backref), ref.name)
+
+    def visit_posarg(self, ref):
+        return self.args[ref.pos].backref
+
+    def visit_namedarg(self, ref):
+        return self.kwargs[ref.name].backref
 
 
-def resolve(env, obj, args, kwargs):
-    if isinstance(obj, Apply):
-        ra_args = [_resolve_one(env, a, args, kwargs) for a in obj.args]
-        ra_kwargs = {k: _resolve_one(env, v, args, kwargs)
-                     for k, v in obj.kwargs.items()}
-        for ref in env.get(obj.func, []):
-            for sub_ref in resolve(env, ref, ra_args, ra_kwargs):
-                yield sub_ref
-    elif isinstance(obj, PositionalArgument):
-        yield args[obj.pos]
-    elif isinstance(obj, NamedArgument):
-        yield kwargs[obj.name]
-    elif isinstance(obj, RecordField):
-        yield RecordField(_resolve_one(env, obj.of, args, kwargs), obj.name)
-    elif isinstance(obj, ListItem):
-        yield ListItem(_resolve_one(env, obj.of, args, kwargs))
-    else:
-        yield obj
+def expand_apply(env, apl, args, kwargs):
+    res = ArgsResolver(args, kwargs)
+    for ref in env.get(apl.func, []):
+        if isinstance(ref, Apply):
+            res_apl_args = [res.visit(a) for a in ref.args]
+            res_apl_kwargs = {k: res.visit(v) for k, v in ref.kwargs.items()}
+            for dep in expand_apply(env, ref, res_apl_args, res_apl_kwargs):
+                yield dep
+        else:
+            yield res.visit(ref)
+
+
+def resolve_refs(env, name):
+    return list(expand_apply(env, Apply(name, [], {}), [], {}))
 
 
 class RefsCollector(NodeVisitor):
