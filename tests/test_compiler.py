@@ -331,20 +331,12 @@ class TestCompile(ParseMixin, TestCase):
         foo_x = foo_each.values[2]
         foo_x.__type__.__ref__ = ListRef(RecordFieldRef(None, 'x'))
 
-        foo_v = RefsCollector()
-        foo_v.visit(foo)
-        print(foo_v.refs)
+        refs_collector = RefsCollector()
+        refs_collector.visit(node)
+        import pprint
+        pprint.pprint(refs_collector.refs)
 
-        bar_v = RefsCollector()
-        bar_v.visit(bar)
-        print(bar_v.refs)
-
-        baz_v = RefsCollector()
-        baz_v.visit(baz)
-        print(baz_v.refs)
-
-        all_refs = {'foo': foo_v.refs, 'bar': bar_v.refs, 'baz': baz_v.refs}
-        refs = resolve_refs(all_refs, 'foo')
+        refs = resolve_refs(refs_collector.refs, 'foo')
         print(refs)
 
         print(gen_query(refs))

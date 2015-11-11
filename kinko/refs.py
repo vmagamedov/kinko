@@ -1,6 +1,6 @@
-from kinko.nodes import NodeVisitor
-from kinko.types import TypeVarMeta
-from kinko.checker import split_args
+from .nodes import NodeVisitor
+from .types import TypeVarMeta
+from .checker import split_args
 
 
 class Reference(object):
@@ -128,8 +128,7 @@ class ArgsResolver(object):
         self.kwargs = kwargs
 
     def visit(self, ref):
-        if ref is not None:
-            return ref.accept(self)
+        return ref.accept(self)
 
     def visit_scalar(self, ref):
         return ScalarRef(self.visit(ref.backref))
@@ -144,7 +143,8 @@ class ArgsResolver(object):
         return RecordRef(self.visit(ref.backref))
 
     def visit_recordfield(self, ref):
-        return RecordFieldRef(self.visit(ref.backref), ref.name)
+        backref = None if ref.backref is None else self.visit(ref.backref)
+        return RecordFieldRef(backref, ref.name)
 
     def visit_posarg(self, ref):
         return self.args[ref.pos].backref
@@ -157,10 +157,11 @@ def expand_apply(env, apl, args, kwargs):
     res = ArgsResolver(args, kwargs)
     for ref in env.get(apl.func, []):
         if isinstance(ref, Apply):
-            res_apl_args = [res.visit(a) for a in ref.args]
-            res_apl_kwargs = {k: res.visit(v) for k, v in ref.kwargs.items()}
-            for dep in expand_apply(env, ref, res_apl_args, res_apl_kwargs):
-                yield dep
+            sub_args = [(a and res.visit(a)) for a in ref.args]
+            sub_kwargs = {k: (v and res.visit(v))
+                          for k, v in ref.kwargs.items()}
+            for sub_ref in expand_apply(env, ref, sub_args, sub_kwargs):
+                yield sub_ref
         else:
             yield res.visit(ref)
 
@@ -172,7 +173,8 @@ def resolve_refs(env, name):
 class RefsCollector(NodeVisitor):
 
     def __init__(self):
-        self.refs = []
+        self.refs = {}
+        self._acc = []
 
     def type_ref(self, type_):
         if type_.__ref__:
@@ -188,13 +190,21 @@ class RefsCollector(NodeVisitor):
     def visit(self, node):
         ref = self.node_ref(node)
         if ref:
-            self.refs.append(ref)
+            self._acc.append(ref)
         super(RefsCollector, self).visit(node)
 
     def visit_tuple(self, node):
         sym, args = node.values[0], node.values[1:]
-        pos_args, kw_args = split_args(args)
-        pos_arg_refs = [self.node_ref(n) for n in pos_args]
-        kw_arg_refs = {k: self.node_ref(v) for k, v in kw_args.items()}
-        self.refs.append(Apply(sym.name, pos_arg_refs, kw_arg_refs))
-        super(RefsCollector, self).visit_tuple(node)
+        if sym.name == 'def':
+            name_sym, body = args[0], args[1:]
+            # visit def's body
+            for item in body:
+                self.visit(item)
+            self.refs[name_sym.name] = self._acc[:]
+            del self._acc[:]
+        else:
+            pos_args, kw_args = split_args(args)
+            pos_arg_refs = [self.node_ref(n) for n in pos_args]
+            kw_arg_refs = {k: self.node_ref(v) for k, v in kw_args.items()}
+            self._acc.append(Apply(sym.name, pos_arg_refs, kw_arg_refs))
+            super(RefsCollector, self).visit_tuple(node)

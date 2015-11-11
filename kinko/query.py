@@ -1,5 +1,5 @@
-from kinko.refs import ReferenceVisitor, RecordFieldRef
-from kinko.nodes import Keyword, Dict, List
+from .refs import ReferenceVisitor, RecordFieldRef
+from .nodes import Keyword, Dict, List
 
 
 class Attr(object):
