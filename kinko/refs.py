@@ -147,10 +147,10 @@ class ArgsResolver(object):
         return RecordFieldRef(backref, ref.name)
 
     def visit_posarg(self, ref):
-        return self.args[ref.pos].backref
+        return self.args[ref.pos]
 
     def visit_namedarg(self, ref):
-        return self.kwargs[ref.name].backref
+        return self.kwargs[ref.name]
 
 
 def expand_apply(env, apl, args, kwargs):
@@ -198,6 +198,7 @@ class RefsCollector(NodeVisitor):
         if sym.name == 'def':
             name_sym, body = args[0], args[1:]
             # visit def's body
+            assert not self._acc
             for item in body:
                 self.visit(item)
             self.refs[name_sym.name] = self._acc[:]

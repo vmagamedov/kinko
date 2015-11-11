@@ -288,7 +288,7 @@ class TestCompile(ParseMixin, TestCase):
           div #b.count
 
         def bar
-          span (get #a name)
+          span #a.name
           span y
           baz :b #a
 
@@ -306,21 +306,23 @@ class TestCompile(ParseMixin, TestCase):
         baz = node.values[0]
         baz_getcount = baz.values[2].values[1]
         baz_getcount.__type__.__ref__ = \
-            ScalarRef(RecordFieldRef(RecordRef(NamedArgRef('b')), 'count'))
+            ScalarRef(RecordFieldRef(NamedArgRef('b'), 'count'))
+        baz_b = baz_getcount.values[1]
+        baz_b.__type__.__ref__ = NamedArgRef('b')
 
         bar = node.values[1]
         bar_join = bar.values[2]
         bar_getname = bar_join.values[1].values[0].values[1]
         bar_getname.__type__.__instance__.__ref__ = \
-            ScalarRef(RecordFieldRef(RecordRef(NamedArgRef('a')), 'name'))
+            ScalarRef(RecordFieldRef(NamedArgRef('a'), 'name'))
 
         bar_getname_a = bar_getname.values[1]
-        bar_getname_a.__type__.__ref__ = RecordRef(NamedArgRef('a'))
+        bar_getname_a.__type__.__ref__ = NamedArgRef('a')
         bar_y = bar_join.values[1].values[1].values[1]
         bar_y.__type__.__ref__ = ScalarRef(RecordFieldRef(None, 'y'))
 
         bar_baz = bar_join.values[1].values[2]
-        bar_baz.values[2].__type__.__ref__ = RecordRef(NamedArgRef('a'))
+        bar_baz.values[2].__type__.__ref__ = NamedArgRef('a')
 
         foo = node.values[2]
         foo_div = foo.values[2]
