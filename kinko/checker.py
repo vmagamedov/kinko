@@ -2,6 +2,7 @@ from itertools import chain
 from contextlib import contextmanager
 from collections import namedtuple, deque
 
+from .refs import NamedArgRef
 from .nodes import Tuple, Number, Keyword, String, List, Symbol, Placeholder
 from .nodes import NodeVisitor, NodeTransformer
 from .types import IntType, NamedArgMeta, StringType, ListType, VarArgsMeta
@@ -271,6 +272,11 @@ JOIN2_TYPE = Func[[StringType, ListType[_MarkupLike]], Markup]
 del __var
 
 
+def with_ref(t, ref):
+    t.__ref__ = ref
+    return t
+
+
 def check_let(fn_type, env, pairs, body):
     assert isinstance(pairs, List), repr(pairs)
     let_vars = {}
@@ -293,7 +299,8 @@ def check_def(fn_type, env, sym, body):
     visitor = _PlaceholdersExtractor()
     [visitor.visit(n) for n in body]
     kw_arg_names = visitor.placeholders
-    def_vars = {name: TypeVar[None] for name in kw_arg_names}
+    def_vars = {name: with_ref(TypeVar[None], NamedArgRef(name))
+                for name in kw_arg_names}
     with env.push(def_vars):
         body = [check(item, env) for item in body]
     args = [NamedArg[name, def_vars[name]] for name in kw_arg_names]

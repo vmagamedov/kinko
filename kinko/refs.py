@@ -86,9 +86,10 @@ class ReferenceVisitor(object):
         self.visit(ref.backref)
 
 
-class PosArgRef(object):
+class PosArgRef(Reference):
 
     def __init__(self, pos):
+        super(PosArgRef, self).__init__(None)
         self.pos = pos
 
     def __repr__(self):
@@ -98,9 +99,10 @@ class PosArgRef(object):
         return visitor.visit_posarg(self)
 
 
-class NamedArgRef(object):
+class NamedArgRef(Reference):
 
     def __init__(self, name):
+        super(NamedArgRef, self).__init__(None)
         self.name = name
 
     def __repr__(self):

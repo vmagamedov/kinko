@@ -1,11 +1,11 @@
 from kinko.nodes import Number, Keyword
 from kinko.utils import split_args
 
-from .base import TestCase, node_eq_patcher
+from .base import TestCase, NODE_EQ_PATCHER
 
 
 class TestUtils(TestCase):
-    ctx = [node_eq_patcher]
+    ctx = [NODE_EQ_PATCHER]
 
     def testSplitArgs(self):
         self.assertEqual(

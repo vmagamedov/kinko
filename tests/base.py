@@ -17,6 +17,7 @@ except ImportError:
                 stack.enter_context(manager)
             yield
 
+from kinko.refs import Reference
 from kinko.nodes import Node
 from kinko.types import GenericMeta
 
@@ -47,7 +48,7 @@ def _node_ne(self, other):
     return not self.__eq__(other)
 
 
-node_eq_patcher = patch.multiple(Node, __eq__=_node_eq, __ne__=_node_ne)
+NODE_EQ_PATCHER = patch.multiple(Node, __eq__=_node_eq, __ne__=_node_ne)
 
 
 def _type_eq(self, other):
@@ -68,7 +69,20 @@ def _type_ne(self, other):
     return not self.__eq__(other)
 
 
-type_eq_patcher = patch.multiple(GenericMeta, __eq__=_type_eq, __ne__=_type_ne)
+TYPE_EQ_PATCHER = patch.multiple(GenericMeta, __eq__=_type_eq, __ne__=_type_ne)
+
+
+def _ref_eq(self, other):
+    if type(self) is not type(other):
+        return False
+    return self.__dict__ == other.__dict__
+
+
+def _ref_ne(self, other):
+    return not self.__eq__(other)
+
+
+REF_EQ_PATCHER = patch.multiple(Reference, __eq__=_ref_eq, __ne__=_ref_ne)
 
 
 class TestCase(unittest.TestCase):

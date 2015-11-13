@@ -4,7 +4,7 @@ from kinko.nodes import Symbol, Tuple, String, Number, Keyword, Dict, List
 from kinko.nodes import Placeholder, NodeVisitor
 from kinko.parser import parser
 
-from .base import TestCase, node_eq_patcher
+from .base import TestCase, NODE_EQ_PATCHER
 from .test_tokenizer import TokenizeMixin
 
 
@@ -30,7 +30,7 @@ class ParseMixin(TokenizeMixin):
 
 
 class TestParser(ParseMixin, TestCase):
-    ctx = [node_eq_patcher]
+    ctx = [NODE_EQ_PATCHER]
 
     def assertParse(self, src, node):
         return self.assertEqual(self.parse(src), node)

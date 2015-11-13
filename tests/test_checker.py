@@ -8,12 +8,12 @@ from kinko.checker import LET_TYPE, DEF_TYPE, GET_TYPE, IF2_TYPE, IF_SOME1_TYPE
 from kinko.checker import unify, NamesResolver, DefsMappingVisitor, Unchecked
 from kinko.checker import match_fn, restore_args, HTML_TAG_TYPE
 
-from .base import TestCase, node_eq_patcher, type_eq_patcher
+from .base import TestCase, NODE_EQ_PATCHER, TYPE_EQ_PATCHER
 from .test_parser import ParseMixin
 
 
 class TestChecker(ParseMixin, TestCase):
-    ctx = [node_eq_patcher, type_eq_patcher]
+    ctx = [NODE_EQ_PATCHER, TYPE_EQ_PATCHER]
 
     def parse_expr(self, src):
         return self.parse(src).values[0]
