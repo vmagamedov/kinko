@@ -2,7 +2,7 @@ from itertools import chain
 from contextlib import contextmanager
 from collections import namedtuple, deque
 
-from .refs import NamedArgRef
+from .refs import NamedArgRef, RecordFieldRef, ListItemRef
 from .nodes import Tuple, Number, Keyword, String, List, Symbol, Placeholder
 from .nodes import NodeVisitor, NodeTransformer
 from .types import IntType, NamedArgMeta, StringType, ListType, VarArgsMeta
@@ -43,7 +43,7 @@ class Environ(object):
             except KeyError:
                 continue
         else:
-            return self.defs[key]
+            return ctx_var(self.defs[key], key)
 
     def __contains__(self, key):
         return any(key in d for d in self.vars) or key in self.defs
@@ -272,9 +272,22 @@ JOIN2_TYPE = Func[[StringType, ListType[_MarkupLike]], Markup]
 del __var
 
 
-def with_ref(t, ref):
-    t.__ref__ = ref
+def prune(t):
+    while isinstance(t, TypeVarMeta):
+        t = t.__instance__
     return t
+
+
+def arg_var(name):
+    t = TypeVar[None]
+    t.__backref__ = NamedArgRef(name)
+    return t
+
+
+def ctx_var(t, name):
+    v = TypeVar[t]
+    v.__backref__ = RecordFieldRef(None, name)
+    return v
 
 
 def check_let(fn_type, env, pairs, body):
@@ -299,8 +312,7 @@ def check_def(fn_type, env, sym, body):
     visitor = _PlaceholdersExtractor()
     [visitor.visit(n) for n in body]
     kw_arg_names = visitor.placeholders
-    def_vars = {name: with_ref(TypeVar[None], NamedArgRef(name))
-                for name in kw_arg_names}
+    def_vars = {name: arg_var(name) for name in kw_arg_names}
     with env.push(def_vars):
         body = [check(item, env) for item in body]
     args = [NamedArg[name, def_vars[name]] for name in kw_arg_names]
@@ -322,6 +334,7 @@ def check_get(fn_type, env, obj, attr):
                              'attribute: "{}"'.format(attr.name))
     else:
         unify(fn_type.__result__, result_type)
+        fn_type.__result__.__backref__ = RecordFieldRef(obj.__type__, attr.name)
         return obj, attr
 
 
@@ -346,7 +359,8 @@ def check_each(fn_type, env, var, col, body):
     assert isinstance(var, Symbol)
     col = check(col, env)
     unify(col.__type__, ListType[TypeVar[None]])
-    var = Symbol.typed(get_type(col).__item_type__, var.name)
+    var = Symbol.typed(TypeVar[get_type(col).__item_type__], var.name)
+    var.__type__.__backref__ = ListItemRef(col.__type__)
     with env.push({var.name: var.__type__}):
         body = [check(item, env) for item in body]
     return var, col, body
@@ -408,7 +422,7 @@ def check_expr(node, env):
     sym, args = node.values[0], node.values[1:]
 
     try:
-        fn_type = env[sym.name]
+        fn_type = prune(env[sym.name])
     except KeyError:
         try:
             fn_types = BUILTINS[sym.name]

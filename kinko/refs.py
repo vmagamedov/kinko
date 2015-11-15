@@ -1,5 +1,5 @@
 from .nodes import NodeVisitor
-from .types import TypeVarMeta
+from .types import TypeVarMeta, RecordMeta, ListTypeMeta
 from .utils import split_args
 
 
@@ -112,15 +112,19 @@ class NamedArgRef(Reference):
         return visitor.visit_namedarg(self)
 
 
-class Apply(object):
+class Apply(Reference):
 
     def __init__(self, func, args, kwargs):
+        super(Apply, self).__init__(None)
         self.func = func
         self.args = args
         self.kwargs = kwargs
 
     def __repr__(self):
         return "(apply {} {!r} {!r})".format(self.func, self.args, self.kwargs)
+
+    def accept(self, visitor):
+        raise NotImplementedError
 
 
 class ArgsResolver(object):
@@ -149,10 +153,10 @@ class ArgsResolver(object):
         return RecordFieldRef(backref, ref.name)
 
     def visit_posarg(self, ref):
-        return self.args[ref.pos]
+        return self.args[ref.pos].backref
 
     def visit_namedarg(self, ref):
-        return self.kwargs[ref.name]
+        return self.kwargs[ref.name].backref
 
 
 def expand_apply(env, apl, args, kwargs):
@@ -172,21 +176,50 @@ def resolve_refs(env, name):
     return list(expand_apply(env, Apply(name, [], {}), [], {}))
 
 
+def prune(t):
+    while isinstance(t, TypeVarMeta):
+        t = t.__instance__
+    return t
+
+
+class RefGen(object):
+
+    def visit(self, obj):
+        if obj is not None:
+            return obj.accept(self)
+
+    def visit_listitem(self, ref):
+        return ListItemRef(self.visit(ref.backref))
+
+    def visit_recordfield(self, ref):
+        return RecordFieldRef(self.visit(ref.backref), ref.name)
+
+    def visit_posarg(self, ref):
+        return ref
+
+    def visit_namedarg(self, ref):
+        return ref
+
+    def visit_typevar(self, var):
+        if isinstance(prune(var), ListTypeMeta):
+            return ListRef(self.visit(var.__backref__))
+        elif isinstance(prune(var), RecordMeta):
+            return RecordRef(self.visit(var.__backref__))
+        else:
+            return ScalarRef(self.visit(var.__backref__))
+
+
 class RefsCollector(NodeVisitor):
 
     def __init__(self):
         self.refs = {}
         self._acc = []
-
-    def type_ref(self, type_):
-        if type_.__ref__:
-            return type_.__ref__
-        if isinstance(type_, TypeVarMeta):
-            return self.type_ref(type_.__instance__)
+        self._ref_gen = RefGen()
 
     def node_ref(self, node):
-        if hasattr(node, '__type__'):
-            return self.type_ref(node.__type__)
+        if isinstance(getattr(node, '__type__', None), TypeVarMeta):
+            if node.__type__.__backref__ is not None:
+                return self._ref_gen.visit(node.__type__)
         return None
 
     def visit(self, node):

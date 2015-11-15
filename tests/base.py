@@ -25,6 +25,10 @@ from kinko.types import GenericMeta
 Mock = _Mock
 
 
+def _ne(self, other):
+    return not self.__eq__(other)
+
+
 def _node_eq(self, other):
     if type(self) is not type(other):
         return False
@@ -44,11 +48,7 @@ def _node_eq(self, other):
         return False
 
 
-def _node_ne(self, other):
-    return not self.__eq__(other)
-
-
-NODE_EQ_PATCHER = patch.multiple(Node, __eq__=_node_eq, __ne__=_node_ne)
+NODE_EQ_PATCHER = patch.multiple(Node, __eq__=_node_eq, __ne__=_ne)
 
 
 def _type_eq(self, other):
@@ -57,19 +57,15 @@ def _type_eq(self, other):
     d1 = dict(self.__dict__)
     d1.pop('__dict__')
     d1.pop('__weakref__')
-    d1.pop('__ref__', None)
+    d1.pop('__backref__', None)
     d2 = dict(other.__dict__)
     d2.pop('__dict__')
     d2.pop('__weakref__')
-    d2.pop('__ref__', None)
+    d2.pop('__backref__', None)
     return d1 == d2
 
 
-def _type_ne(self, other):
-    return not self.__eq__(other)
-
-
-TYPE_EQ_PATCHER = patch.multiple(GenericMeta, __eq__=_type_eq, __ne__=_type_ne)
+TYPE_EQ_PATCHER = patch.multiple(GenericMeta, __eq__=_type_eq, __ne__=_ne)
 
 
 def _ref_eq(self, other):
@@ -78,11 +74,7 @@ def _ref_eq(self, other):
     return self.__dict__ == other.__dict__
 
 
-def _ref_ne(self, other):
-    return not self.__eq__(other)
-
-
-REF_EQ_PATCHER = patch.multiple(Reference, __eq__=_ref_eq, __ne__=_ref_ne)
+REF_EQ_PATCHER = patch.multiple(Reference, __eq__=_ref_eq, __ne__=_ne)
 
 
 class TestCase(unittest.TestCase):

@@ -2,9 +2,6 @@
 import difflib
 from textwrap import dedent
 
-from kinko.refs import NamedArgRef, RecordRef, RecordFieldRef, ScalarRef
-from kinko.refs import ListItemRef, ListRef, RefsCollector, resolve_refs
-from kinko.query import gen_query
 from kinko.utils import Buffer
 from kinko.types import StringType, ListType, VarNamedArgs, Func, Record
 from kinko.types import IntType, Union, Markup, NamedArg
@@ -276,66 +273,3 @@ class TestCompile(ParseMixin, TestCase):
             content,
             u"<div><div>1</div><div>2</div><div>Привет</div></div>",
         )
-
-    def testRequirements(self):
-        node = self.parse(u"""
-        def baz
-          div #b.count
-
-        def bar
-          span #a.name
-          span y
-          baz :b #a
-
-        def foo
-          div
-            each i x
-              bar :a i
-        """)
-        node = check(node, Environ({
-            'x': ListType[Record[{'name': StringType,
-                                  'count': IntType}]],
-            'y': StringType,
-        }))
-
-        baz = node.values[0]
-        baz_getcount = baz.values[2].values[1]
-        baz_getcount.__type__.__ref__ = \
-            ScalarRef(RecordFieldRef(NamedArgRef('b'), 'count'))
-        baz_b = baz_getcount.values[1]
-        baz_b.__type__.__ref__ = NamedArgRef('b')
-
-        bar = node.values[1]
-        bar_join = bar.values[2]
-        bar_getname = bar_join.values[1].values[0].values[1]
-        bar_getname.__type__.__instance__.__ref__ = \
-            ScalarRef(RecordFieldRef(NamedArgRef('a'), 'name'))
-
-        bar_getname_a = bar_getname.values[1]
-        bar_getname_a.__type__.__ref__ = NamedArgRef('a')
-        bar_y = bar_join.values[1].values[1].values[1]
-        bar_y.__type__.__ref__ = ScalarRef(RecordFieldRef(None, 'y'))
-
-        bar_baz = bar_join.values[1].values[2]
-        bar_baz.values[2].__type__.__ref__ = NamedArgRef('a')
-
-        foo = node.values[2]
-        foo_div = foo.values[2]
-        foo_each = foo_div.values[1]
-        foo_i = foo_each.values[1]
-        foo_i.__type__.__ref__ = \
-            RecordRef(ListItemRef(ListRef(RecordFieldRef(None, 'x'))))
-        foo_x = foo_each.values[2]
-        foo_x.__type__.__ref__ = ListRef(RecordFieldRef(None, 'x'))
-
-        refs_collector = RefsCollector()
-        refs_collector.visit(node)
-        import pprint
-        pprint.pprint(refs_collector.refs)
-
-        refs = resolve_refs(refs_collector.refs, 'foo')
-        print(refs)
-
-        print(gen_query(refs))
-
-        # 1/0

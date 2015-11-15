@@ -54,7 +54,8 @@ class QueryGenerator(object):
         return Dict([Keyword(node.name), self.visit(node.edge)])
 
     def visit_edge(self, node):
-        return List([self.visit(attr) for attr in node.attrs.values()])
+        names = sorted(node.attrs.keys())
+        return List([self.visit(node.attrs[name]) for name in names])
 
 
 class RefPathExtractor(ReferenceVisitor):
