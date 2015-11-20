@@ -2,7 +2,7 @@ from kinko.nodes import Tuple, Symbol, Number, Keyword, List, Placeholder
 from kinko.nodes import String
 from kinko.types import Func, IntType, StringType, NamedArg, TypeVar, Markup
 from kinko.types import Record, ListType, Union, DictType, Option
-from kinko.types import VarArgs, VarNamedArgs
+from kinko.types import VarArgs, VarNamedArgs, BoolType
 from kinko.checker import Environ, check, KinkoTypeError, EACH_TYPE
 from kinko.checker import LET_TYPE, DEF_TYPE, GET_TYPE, IF2_TYPE, IF_SOME1_TYPE
 from kinko.checker import unify, NamesResolver, DefsMappingVisitor, Unchecked
@@ -108,6 +108,17 @@ class TestChecker(ParseMixin, TestCase):
         with self.assertRaises(KinkoTypeError):
             unify(TypeVar[IntType], StringType)
 
+    def testUnifySubtype(self):
+        a = TypeVar[BoolType]
+        unify(a, IntType, covariant=True)
+        self.assertIsInstance(IntType, type(a.__instance__))
+        self.assertEqual(a.__instance__, IntType)
+
+        b = TypeVar[Record[{'a': BoolType, 'b': BoolType}]]
+        unify(b, Record[{'b': IntType, 'c': IntType}], covariant=True)
+        self.assertEqual(b.__instance__,
+                         Record[{'a': BoolType, 'b': IntType, 'c': IntType}])
+
     def testUnifyUnion(self):
         a = Union[StringType, IntType]
         unify(a, a)
@@ -118,7 +129,7 @@ class TestChecker(ParseMixin, TestCase):
 
     def testUnifyRecordType(self):
         rec_type = Record[{'a': IntType}]
-        unify(rec_type, Record[{'b': IntType}])
+        unify(rec_type, Record[{'b': IntType}], covariant=True)
         self.assertEqual(rec_type, Record[{'a': IntType, 'b': IntType}])
 
         with self.assertRaises(KinkoTypeError):
@@ -222,10 +233,9 @@ class TestChecker(ParseMixin, TestCase):
             ]),
             {'inc': inc_type, 'bar': bar_type},
         )
-        # TODO: fix checker
-        # with self.assertRaises(KinkoTypeError):
-        #     self.check('inc bar.unknown',
-        #                {'inc': inc_type, 'bar': bar_type})
+        with self.assertRaises(KinkoTypeError):
+            self.check('inc bar.unknown',
+                       {'inc': inc_type, 'bar': bar_type})
 
     def testRecordInfer(self):
         bar_type = Record[{'baz': TypeVar[IntType]}]

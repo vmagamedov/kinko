@@ -2,7 +2,7 @@ from itertools import chain
 from contextlib import contextmanager
 from collections import namedtuple, deque
 
-from .refs import NamedArgRef, RecordFieldRef, ListItemRef
+from .refs import PosArgRef, NamedArgRef, RecordFieldRef, ListItemRef
 from .nodes import Tuple, Number, Keyword, String, List, Symbol, Placeholder
 from .nodes import NodeVisitor, NodeTransformer
 from .types import IntType, NamedArgMeta, StringType, ListType, VarArgsMeta
@@ -10,6 +10,7 @@ from .types import TypeVarMeta, TypeVar, Func, NamedArg, Record
 from .types import RecordMeta, BoolType, Union, ListTypeMeta, DictTypeMeta
 from .types import TypingMeta, UnionMeta, Nothing, Option, VarArgs
 from .types import TypeTransformer, Markup, VarNamedArgs, VarNamedArgsMeta
+from .types import issubtype
 from .utils import VarsGen, split_args
 from .constant import HTML_ELEMENTS
 
@@ -114,12 +115,43 @@ def get_type(node):
     return t
 
 
-def unify(t1, t2):
+def get_origin(obj):
+    if isinstance(obj, TypeVarMeta):
+        if obj.__backref__ is not None:
+            return get_origin(obj.__backref__)
+    else:
+        if obj.backref is not None:
+            return get_origin(obj.backref)
+    return obj
+
+
+def is_arg_origin(t):
+    ref = get_origin(t)
+    return isinstance(ref, (NamedArgRef, PosArgRef))
+
+
+def find_subtype(t1, t2):
+    if t1 is None or issubtype(t2, t1):
+        return t2
+    elif t2 is None or issubtype(t1, t2):
+        return t1
+    elif isinstance(t1, RecordMeta) and isinstance(t2, RecordMeta):
+        items = {}
+        for key in (set(t1.__items__) | set(t2.__items__)):
+            items[key] = find_subtype(t1.__items__.get(key),
+                                      t2.__items__.get(key))
+        return Record[items]
+    else:
+        raise TypeError('Subtype for {!r} and {!r} not found'
+                        .format(t1, t2))
+
+
+def unify(t1, t2, covariant=False):
     if isinstance(t1, TypeVarMeta):
-        if t1.__instance__ is None:
-            t1.__instance__ = t2
+        if covariant or t1.__instance__ is None:
+            t1.__instance__ = find_subtype(t1.__instance__, t2)
         else:
-            unify(t1.__instance__, t2)
+            unify(t1.__instance__, t2, covariant=is_arg_origin(t1))
     elif isinstance(t2, TypeVarMeta):
         unify(t2, t1)
     else:
@@ -145,8 +177,11 @@ def unify(t1, t2):
                         for key, value in t2.__items__.items():
                             if key in t1.__items__:
                                 unify(t1.__items__[key], value)
-                            else:
+                            elif covariant:
                                 t1.__items__[key] = value
+                            else:
+                                raise KinkoTypeError('Missing key {} in {}'
+                                                     .format(key, t1))
                     return
 
                 elif isinstance(t1, ListTypeMeta):

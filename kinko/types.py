@@ -1,6 +1,12 @@
 from .compat import with_metaclass
 
 
+def issubtype(t1, t2):
+    if hasattr(t2, '__issubtypecheck__'):
+        return t2.__issubtypecheck__(t1)
+    return isinstance(t1, type(t2))
+
+
 class GenericMeta(type):
 
     def __repr__(cls):
@@ -69,6 +75,9 @@ class TypingMeta(GenericMeta):
         type_ = cls.__class__(cls.__name__, cls.__bases__, dict(cls.__dict__))
         type_.__cls_init__(parameters)
         return type_
+
+    def __issubtypecheck__(cls, other):
+        return False
 
 
 class TypeVarMeta(TypingMeta):
@@ -228,6 +237,13 @@ class RecordMeta(TypingMeta):
 
     def __repr__(cls):
         return '{}[{!r}]'.format(cls.__name__, cls.__items__)
+
+    def __issubtypecheck__(cls, other):
+        if isinstance(other, RecordMeta):
+            if all(issubtype(other.__items__.get(k), v)
+                   for k, v in cls.__items__.items()):
+                return True
+        return False
 
     def accept(cls, visitor):
         return visitor.visit_record(cls)
