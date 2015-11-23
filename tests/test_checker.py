@@ -1,3 +1,4 @@
+from kinko.refs import NamedArgRef
 from kinko.nodes import Tuple, Symbol, Number, Keyword, List, Placeholder
 from kinko.nodes import String
 from kinko.types import Func, IntType, StringType, NamedArg, TypeVar, Markup
@@ -110,14 +111,18 @@ class TestChecker(ParseMixin, TestCase):
 
     def testUnifySubtype(self):
         a = TypeVar[BoolType]
-        unify(a, IntType, covariant=True)
+        a.__backref__ = NamedArgRef('arg')
+        unify(a, IntType)
         self.assertIsInstance(IntType, type(a.__instance__))
         self.assertEqual(a.__instance__, IntType)
 
-        b = TypeVar[Record[{'a': BoolType, 'b': BoolType}]]
-        unify(b, Record[{'b': IntType, 'c': IntType}], covariant=True)
-        self.assertEqual(b.__instance__,
-                         Record[{'a': BoolType, 'b': IntType, 'c': IntType}])
+        b = TypeVar[None]
+        b.__backref__ = NamedArgRef('arg')
+        unify(b, Record[{'a': BoolType, 'b': BoolType}])
+        unify(b, Record[{'b': IntType, 'c': IntType}])
+        self.assertEqual(b, Record[{
+            'a': BoolType, 'b': IntType, 'c': IntType,
+        }])
 
     def testUnifyUnion(self):
         a = Union[StringType, IntType]
@@ -128,9 +133,9 @@ class TestChecker(ParseMixin, TestCase):
         unify(StringType, a)
 
     def testUnifyRecordType(self):
-        rec_type = Record[{'a': IntType}]
-        unify(rec_type, Record[{'b': IntType}], covariant=True)
-        self.assertEqual(rec_type, Record[{'a': IntType, 'b': IntType}])
+        rec_type = Record[{'a': TypeVar[None]}]
+        unify(rec_type, Record[{'a': IntType}])
+        self.assertEqual(rec_type, Record[{'a': IntType}])
 
         with self.assertRaises(KinkoTypeError):
             unify(Record[{'a': IntType}], Record[{'a': StringType}])
@@ -174,7 +179,7 @@ class TestChecker(ParseMixin, TestCase):
             """,
             Tuple.typed(IntType, [
                 Symbol.typed(inc_type, 'inc'),
-                Symbol.typed(TypeVar[IntType], 'var'),
+                Symbol.typed(IntType, 'var'),
             ]),
             {'inc': inc_type, 'var': IntType},
         )
@@ -183,7 +188,7 @@ class TestChecker(ParseMixin, TestCase):
         inc_type = Func[[IntType], IntType]
         self.assertChecks(
             'let [x 1] (inc x)',
-            Tuple.typed(TypeVar[IntType], [
+            Tuple.typed(IntType, [
                 Symbol.typed(LET_TYPE, 'let'),
                 List([
                     Symbol.typed(IntType, 'x'),
@@ -199,18 +204,18 @@ class TestChecker(ParseMixin, TestCase):
 
     def testInfer(self):
         inc_type = Func[[IntType], IntType]
-        foo_type = Func[[NamedArg['arg', TypeVar[IntType]]], IntType]
+        foo_type = Func[[NamedArg['arg', IntType]], IntType]
         self.assertChecks(
             """
             def foo
               inc #arg
             """,
-            Tuple.typed(TypeVar[foo_type], [
+            Tuple.typed(foo_type, [
                 Symbol.typed(DEF_TYPE, 'def'),
                 Symbol('foo'),
                 Tuple.typed(IntType, [
                     Symbol.typed(inc_type, 'inc'),
-                    Placeholder.typed(TypeVar[IntType], 'arg'),
+                    Placeholder.typed(IntType, 'arg'),
                 ])
             ]),
             {'inc': inc_type},
@@ -225,9 +230,9 @@ class TestChecker(ParseMixin, TestCase):
             """,
             Tuple.typed(IntType, [
                 Symbol.typed(inc_type, 'inc'),
-                Tuple.typed(TypeVar[IntType], [
+                Tuple.typed(IntType, [
                     Symbol.typed(GET_TYPE, 'get'),
-                    Symbol.typed(TypeVar[bar_type], 'bar'),
+                    Symbol.typed(bar_type, 'bar'),
                     Symbol('baz'),
                 ]),
             ]),
@@ -238,27 +243,45 @@ class TestChecker(ParseMixin, TestCase):
                        {'inc': inc_type, 'bar': bar_type})
 
     def testRecordInfer(self):
-        bar_type = Record[{'baz': TypeVar[IntType]}]
+        bar_type = Record[{'baz': IntType}]
         inc_type = Func[[IntType], IntType]
-        foo_type = Func[[NamedArg['bar', TypeVar[bar_type]]], IntType]
+        foo_type = Func[[NamedArg['bar', bar_type]], IntType]
         self.assertChecks(
             """
             def foo
               inc #bar.baz
             """,
-            Tuple.typed(TypeVar[foo_type], [
+            Tuple.typed(foo_type, [
                 Symbol.typed(DEF_TYPE, 'def'),
                 Symbol('foo'),
                 Tuple.typed(IntType, [
                     Symbol.typed(inc_type, 'inc'),
-                    Tuple.typed(TypeVar[TypeVar[IntType]], [
+                    Tuple.typed(IntType, [
                         Symbol.typed(GET_TYPE, 'get'),
-                        Placeholder.typed(TypeVar[bar_type], 'bar'),
+                        Placeholder.typed(bar_type, 'bar'),
                         Symbol('baz'),
                     ]),
                 ])
             ]),
             {'inc': inc_type},
+        )
+
+    def testRecordInferWithSubTyping(self):
+        n = self.check(
+            """
+            def foo
+              f1 #bar.baz
+              f2 #bar
+              f3 #bar.baz
+            """,
+            {'f1': Func[[BoolType], StringType],
+             'f2': Func[[Record[{'baz': TypeVar[None]}]], StringType],
+             'f3': Func[[IntType], StringType]},
+        )
+        self.assertEqual(
+            n.__type__.__instance__,
+            Func[[NamedArg['bar', Record[{'baz': IntType}]]],
+                 Markup],
         )
 
     def testIf(self):
@@ -267,7 +290,7 @@ class TestChecker(ParseMixin, TestCase):
             """
             if (inc 1) (inc 2) (inc 3)
             """,
-            Tuple.typed(TypeVar[Union[IntType,]], [
+            Tuple.typed(Union[IntType,], [
                 Symbol.typed(IF2_TYPE, 'if'),
                 Tuple.typed(IntType, [
                     Symbol.typed(inc_type, 'inc'),
@@ -293,13 +316,13 @@ class TestChecker(ParseMixin, TestCase):
             """
             if-some [x foo.bar] (inc x)
             """,
-            Tuple.typed(TypeVar[Option[IntType]], [
+            Tuple.typed(Option[IntType], [
                 Symbol.typed(IF_SOME1_TYPE, 'if-some'),
                 List([
                     Symbol('x'),
-                    Tuple.typed(TypeVar[Option[IntType]], [
+                    Tuple.typed(Option[IntType], [
                         Symbol.typed(GET_TYPE, 'get'),
-                        Symbol.typed(TypeVar[foo_type], 'foo'),
+                        Symbol.typed(foo_type, 'foo'),
                         Symbol('bar'),
                     ]),
                 ]),
@@ -324,13 +347,13 @@ class TestChecker(ParseMixin, TestCase):
             """,
             Tuple.typed(Markup, [
                 Symbol.typed(EACH_TYPE, 'each'),
-                Symbol.typed(TypeVar[rec_type], 'i'),
-                Symbol.typed(TypeVar[list_rec_type], 'collection'),
+                Symbol.typed(rec_type, 'i'),
+                Symbol.typed(list_rec_type, 'collection'),
                 Tuple.typed(IntType, [
                     Symbol.typed(inc_type, 'inc'),
-                    Tuple.typed(TypeVar[IntType], [
+                    Tuple.typed(IntType, [
                         Symbol.typed(GET_TYPE, 'get'),
-                        Symbol.typed(TypeVar[rec_type], 'i'),
+                        Symbol.typed(rec_type, 'i'),
                         Symbol('attr'),
                     ]),
                 ]),
@@ -408,10 +431,10 @@ class TestChecker(ParseMixin, TestCase):
 
         foo_expr, bar_expr = node.values
         self.assertEqual(foo_expr.__type__,
-                         TypeVar[Func[[], TypeVar[StringType]]])
+                         Func[[], StringType])
         self.assertEqual(bar_expr.__type__,
-                         TypeVar[Func[[NamedArg['arg', TypeVar[None]]],
-                                      TypeVar[None]]])
+                         Func[[NamedArg['arg', TypeVar[None]]],
+                              TypeVar[None]])
         # checks that TypeVar instance is the same
         self.assertIs(bar_expr.__type__.__instance__.__args__[0].__arg_type__,
                       bar_expr.__type__.__instance__.__result__)

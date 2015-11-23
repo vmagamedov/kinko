@@ -10,7 +10,6 @@ from .types import TypeVarMeta, TypeVar, Func, NamedArg, Record
 from .types import RecordMeta, BoolType, Union, ListTypeMeta, DictTypeMeta
 from .types import TypingMeta, UnionMeta, Nothing, Option, VarArgs
 from .types import TypeTransformer, Markup, VarNamedArgs, VarNamedArgsMeta
-from .types import issubtype
 from .utils import VarsGen, split_args
 from .constant import HTML_ELEMENTS
 
@@ -27,7 +26,9 @@ class Environ(object):
 
     def __init__(self, defs=None):
         self.vars = deque([{}])
-        self.defs = defs.copy() if defs else {}
+        ctx = TypeVar[None]
+        unify(ctx, Record[defs or {}], TypeVar[None])
+        self.defs = ctx.__instance__.__items__
 
     @contextmanager
     def push(self, mapping):
@@ -44,7 +45,7 @@ class Environ(object):
             except KeyError:
                 continue
         else:
-            return ctx_var(self.defs[key], key)
+            return self.defs[key]
 
     def __contains__(self, key):
         return any(key in d for d in self.vars) or key in self.defs
@@ -125,46 +126,70 @@ def get_origin(obj):
     return obj
 
 
-def is_arg_origin(t):
-    ref = get_origin(t)
-    return isinstance(ref, (NamedArgRef, PosArgRef))
+def is_from_arg(ref):
+    return isinstance(get_origin(ref), (NamedArgRef, PosArgRef))
 
 
-def find_subtype(t1, t2):
-    if t1 is None or issubtype(t2, t1):
-        return t2
-    elif t2 is None or issubtype(t1, t2):
-        return t1
-    elif isinstance(t1, RecordMeta) and isinstance(t2, RecordMeta):
-        items = {}
-        for key in (set(t1.__items__) | set(t2.__items__)):
-            items[key] = find_subtype(t1.__items__.get(key),
-                                      t2.__items__.get(key))
-        return Record[items]
-    else:
-        raise TypeError('Subtype for {!r} and {!r} not found'
-                        .format(t1, t2))
+def item_ref(backref):
+    v = TypeVar[None]
+    v.__backref__ = ListItemRef(backref)
+    return v
 
 
-def unify(t1, t2, covariant=False):
-    if isinstance(t1, TypeVarMeta):
-        if covariant or t1.__instance__ is None:
-            t1.__instance__ = find_subtype(t1.__instance__, t2)
-        else:
-            unify(t1.__instance__, t2, covariant=is_arg_origin(t1))
+def field_refs(backref, names):
+    mapping = {}
+    for name in names:
+        v = TypeVar[None]
+        v.__backref__ = RecordFieldRef(backref, name)
+        mapping[name] = v
+    return mapping
+
+
+def unify(t1, t2, backref=None):
+    if isinstance(t2, TypeVarMeta) and t2.__instance__ is None:
+        t2.__instance__ = t1
+
     elif isinstance(t2, TypeVarMeta):
-        unify(t2, t1)
+        assert False  # bound type-vars are not expected in t2
+
+    elif isinstance(t1, TypeVarMeta) and t1.__instance__ is None:
+        backref = t1 if t1.__backref__ else backref
+        if backref and isinstance(t2, RecordMeta):
+            t1.__instance__ = Record[field_refs(backref, t2.__items__)]
+            unify(t1, t2, backref)
+        elif backref and isinstance(t2, ListTypeMeta):
+            t1.__instance__ = ListType[item_ref(backref)]
+            unify(t1, t2, backref)
+        elif backref and isinstance(t2, DictTypeMeta):
+            raise NotImplementedError('TODO')
+        else:
+            t1.__instance__ = t2
+
+    elif isinstance(t1, TypeVarMeta):
+        backref = t1 if t1.__backref__ else backref
+        try:
+            unify(t1.__instance__, t2, backref)
+        except KinkoTypeError:
+            if (
+                backref and is_from_arg(backref) and
+                not isinstance(t1.__instance__, TypingMeta) and
+                isinstance(t2, type(t1.__instance__))
+            ):
+                t1.__instance__ = t2
+            else:
+                raise
+
     else:
         if isinstance(t1, UnionMeta):
             # all types from t1 union should unify with t2
             for t in t1.__types__:
-                unify(t, t2)
+                unify(t, t2, backref)
             return
         elif isinstance(t2, UnionMeta):
             # t1 should unify with at least one type from t2 union
             for t in t2.__types__:
                 try:
-                    unify(t1, t)
+                    unify(t1, t, backref)
                 except KinkoTypeError:
                     continue
                 else:
@@ -173,26 +198,24 @@ def unify(t1, t2, covariant=False):
         else:
             if isinstance(t1, type(t2)):
                 if isinstance(t1, RecordMeta):
-                    if isinstance(t2, RecordMeta):
-                        for key, value in t2.__items__.items():
-                            if key in t1.__items__:
-                                unify(t1.__items__[key], value)
-                            elif covariant:
-                                t1.__items__[key] = value
-                            else:
-                                raise KinkoTypeError('Missing key {} in {}'
-                                                     .format(key, t1))
+                    s1, s2 = set(t1.__items__), set(t2.__items__)
+                    if backref and is_from_arg(backref):
+                        t1.__items__.update(field_refs(backref, s2 - s1))
+                    else:
+                        if s2 - s1:
+                            raise KinkoTypeError('Missing keys {} in {!r}'
+                                                 .format(s2 - s1, t1))
+                    for k, v2 in t2.__items__.items():
+                        unify(t1.__items__[k], v2, backref)
                     return
 
                 elif isinstance(t1, ListTypeMeta):
-                    if isinstance(t2, ListTypeMeta):
-                        unify(t1.__item_type__, t2.__item_type__)
+                    unify(t1.__item_type__, t2.__item_type__, backref)
                     return
 
                 elif isinstance(t1, DictTypeMeta):
-                    if isinstance(t2, DictTypeMeta):
-                        unify(t1.__key_type__, t2.__key_type__)
-                        unify(t1.__value_type__, t2.__value_type__)
+                    unify(t1.__key_type__, t2.__key_type__, backref)
+                    unify(t1.__value_type__, t2.__value_type__, backref)
                     return
 
                 if not isinstance(t1, TypingMeta):
@@ -360,17 +383,8 @@ def check_def(fn_type, env, sym, body):
 def check_get(fn_type, env, obj, attr):
     obj = check(obj, env)
     assert isinstance(attr, Symbol)
-    if isinstance(obj.__type__, TypeVarMeta):
-        unify(obj.__type__, Record[{attr.name: TypeVar[None]}])
-    try:
-        result_type = get_type(obj).__items__[attr.name]
-    except KeyError:
-        raise KinkoTypeError('Trying to get unknown record '
-                             'attribute: "{}"'.format(attr.name))
-    else:
-        unify(fn_type.__result__, result_type)
-        fn_type.__result__.__backref__ = RecordFieldRef(obj.__type__, attr.name)
-        return obj, attr
+    unify(obj.__type__, Record[{attr.name: fn_type.__result__}])
+    return obj, attr
 
 
 def check_if1(fn_type, env, test, then_):
@@ -393,10 +407,10 @@ def check_if2(fn_type, env, test, then_, else_):
 def check_each(fn_type, env, var, col, body):
     assert isinstance(var, Symbol)
     col = check(col, env)
-    unify(col.__type__, ListType[TypeVar[None]])
-    var = Symbol.typed(TypeVar[get_type(col).__item_type__], var.name)
-    var.__type__.__backref__ = ListItemRef(col.__type__)
-    with env.push({var.name: var.__type__}):
+    var_type = TypeVar[None]
+    unify(col.__type__, ListType[var_type])
+    var = Symbol.typed(var_type, var.name)
+    with env.push({var.name: var_type}):
         body = [check(item, env) for item in body]
     return var, col, body
 

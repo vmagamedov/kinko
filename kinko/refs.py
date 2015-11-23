@@ -201,9 +201,12 @@ class RefGen(object):
         return ref
 
     def visit_typevar(self, var):
-        if isinstance(prune(var), ListTypeMeta):
+        inst = prune(var)
+        if inst is None:
+            return None
+        elif isinstance(inst, ListTypeMeta):
             return ListRef(self.visit(var.__backref__))
-        elif isinstance(prune(var), RecordMeta):
+        elif isinstance(inst, RecordMeta):
             return RecordRef(self.visit(var.__backref__))
         else:
             return ScalarRef(self.visit(var.__backref__))
@@ -216,11 +219,15 @@ class RefsCollector(NodeVisitor):
         self._acc = []
         self._ref_gen = RefGen()
 
+    def type_ref(self, type_):
+        if isinstance(type_, TypeVarMeta):
+            if type_.__backref__ is not None:
+                return self._ref_gen.visit(type_)
+            else:
+                return self.type_ref(type_.__instance__)
+
     def node_ref(self, node):
-        if isinstance(getattr(node, '__type__', None), TypeVarMeta):
-            if node.__type__.__backref__ is not None:
-                return self._ref_gen.visit(node.__type__)
-        return None
+        return self.type_ref(getattr(node, '__type__', None))
 
     def visit(self, node):
         ref = self.node_ref(node)

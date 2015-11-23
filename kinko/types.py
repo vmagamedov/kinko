@@ -1,12 +1,6 @@
 from .compat import with_metaclass
 
 
-def issubtype(t1, t2):
-    if hasattr(t2, '__issubtypecheck__'):
-        return t2.__issubtypecheck__(t1)
-    return isinstance(t1, type(t2))
-
-
 class GenericMeta(type):
 
     def __repr__(cls):
@@ -18,6 +12,9 @@ class GenericMeta(type):
 
 class BoolTypeMeta(GenericMeta):
 
+    def __repr__(cls):
+        return 'bool'
+
     def accept(cls, visitor):
         return visitor.visit_bool(cls)
 
@@ -27,6 +24,9 @@ class BoolType(with_metaclass(BoolTypeMeta, object)):
 
 
 class NothingMeta(BoolTypeMeta):
+
+    def __repr__(cls):
+        return 'none'
 
     def accept(cls, visitor):
         return visitor.visit_nothing(cls)
@@ -38,6 +38,9 @@ class Nothing(with_metaclass(NothingMeta, object)):
 
 class StringTypeMeta(BoolTypeMeta):
 
+    def __repr__(cls):
+        return 'str'
+
     def accept(cls, visitor):
         return visitor.visit_string(cls)
 
@@ -48,6 +51,9 @@ class StringType(with_metaclass(StringTypeMeta, object)):
 
 class IntTypeMeta(BoolTypeMeta):
 
+    def __repr__(cls):
+        return 'int'
+
     def accept(cls, visitor):
         return visitor.visit_int(cls)
 
@@ -57,6 +63,9 @@ class IntType(with_metaclass(IntTypeMeta, object)):
 
 
 class MarkupMeta(GenericMeta):
+
+    def __repr__(cls):
+        return 'markup'
 
     def accept(cls, visitor):
         return visitor.visit_markup(cls)
@@ -76,9 +85,6 @@ class TypingMeta(GenericMeta):
         type_.__cls_init__(parameters)
         return type_
 
-    def __issubtypecheck__(cls, other):
-        return False
-
 
 class TypeVarMeta(TypingMeta):
     __backref__ = None
@@ -87,7 +93,10 @@ class TypeVarMeta(TypingMeta):
         cls.__instance__ = instance
 
     def __repr__(cls):
-        return '{}[{!r}]'.format(cls.__name__, cls.__instance__)
+        return '<{}:{}>'.format(
+            hex(id(cls))[-3:].upper(),
+            repr(cls.__instance__) if cls.__instance__ is not None else '?',
+        )
 
     def accept(cls, visitor):
         return visitor.visit_typevar(cls)
@@ -103,8 +112,7 @@ class UnionMeta(TypingMeta):
         cls.__types__ = set(types)
 
     def __repr__(cls):
-        return '{}[{}]'.format(cls.__name__,
-                               '|'.join(map(repr, cls.__types__)))
+        return '|'.join(map(repr, cls.__types__))
 
     def accept(cls, visitor):
         return visitor.visit_union(cls)
@@ -137,8 +145,10 @@ class FuncMeta(TypingMeta):
         cls.__args__, cls.__result__ = params
 
     def __repr__(cls):
-        return '{}[{!r}, {!r}]'.format(cls.__name__, cls.__args__,
-                                       cls.__result__)
+        return '({} -> {!r})'.format(
+            ' '.join(map(repr, cls.__args__)),
+            cls.__result__,
+        )
 
     def accept(cls, visitor):
         return visitor.visit_func(cls)
@@ -154,7 +164,7 @@ class VarArgsMeta(TypingMeta):
         cls.__arg_type__ = arg_type
 
     def __repr__(cls):
-        return '{}[{!r}]'.format(cls.__name__, cls.__arg_type__)
+        return '*{!r}'.format(cls.__arg_type__)
 
     def accept(cls, visitor):
         return visitor.visit_varargs(cls)
@@ -170,8 +180,7 @@ class NamedArgMeta(TypingMeta):
         cls.__arg_name__, cls.__arg_type__ = params
 
     def __repr__(cls):
-        return '{}[{}={!r}]'.format(cls.__name__, cls.__arg_name__,
-                                    cls.__arg_type__)
+        return ':{} {!r}'.format(cls.__arg_name__, cls.__arg_type__)
 
     def accept(cls, visitor):
         return visitor.visit_namedarg(cls)
@@ -187,7 +196,7 @@ class VarNamedArgsMeta(TypingMeta):
         cls.__arg_type__ = arg_type
 
     def __repr__(cls):
-        return '{}[{!r}]'.format(cls.__name__, cls.__arg_type__)
+        return '**{!r}'.format(cls.__arg_type__)
 
     def accept(cls, visitor):
         return visitor.visit_varnamedargs(cls)
@@ -203,7 +212,7 @@ class ListTypeMeta(TypingMeta):
         cls.__item_type__ = item_type
 
     def __repr__(cls):
-        return '{}[{!r}]'.format(cls.__name__, cls.__item_type__)
+        return '[{!r}]'.format(cls.__item_type__)
 
     def accept(cls, visitor):
         return visitor.visit_list(cls)
@@ -219,8 +228,7 @@ class DictTypeMeta(TypingMeta):
         cls.__key_type__, cls.__value_type__ = params
 
     def __repr__(cls):
-        return '{}[{!r}={!r}]'.format(cls.__name__, cls.__key_type__,
-                                      cls.__value_type__)
+        return '{{:{!r} {!r}}}'.format(cls.__key_type__, cls.__value_type__)
 
     def accept(cls, visitor):
         return visitor.visit_dict(cls)
@@ -236,14 +244,10 @@ class RecordMeta(TypingMeta):
         cls.__items__ = dict(items)
 
     def __repr__(cls):
-        return '{}[{!r}]'.format(cls.__name__, cls.__items__)
-
-    def __issubtypecheck__(cls, other):
-        if isinstance(other, RecordMeta):
-            if all(issubtype(other.__items__.get(k), v)
-                   for k, v in cls.__items__.items()):
-                return True
-        return False
+        return '{}{{{}}}'.format(
+            cls.__name__,
+            ' '.join(':{} {!r}'.format(*i) for i in cls.__items__.items()),
+        )
 
     def accept(cls, visitor):
         return visitor.visit_record(cls)

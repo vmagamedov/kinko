@@ -19,8 +19,7 @@ except ImportError:
 
 from kinko.refs import Reference
 from kinko.nodes import Node
-from kinko.types import GenericMeta
-
+from kinko.types import GenericMeta, TypeVarMeta
 
 Mock = _Mock
 
@@ -52,6 +51,8 @@ NODE_EQ_PATCHER = patch.multiple(Node, __eq__=_node_eq, __ne__=_ne)
 
 
 def _type_eq(self, other):
+    if isinstance(self, TypeVarMeta) and self.__instance__ is not None:
+        return _type_eq(self.__instance__, other)
     if type(self) is not type(other):
         return False
     d1 = dict(self.__dict__)
