@@ -1,5 +1,6 @@
 from ast import NodeTransformer, iter_fields, copy_location
-from itertools import chain
+from contextlib import contextmanager
+from collections import Counter
 
 import astor
 
@@ -14,6 +15,29 @@ from .checker import GET_TYPE, get_type
 from .constant import SELF_CLOSING_ELEMENTS
 
 
+class Environ(object):
+
+    def __init__(self):
+        self.vars = Counter()
+
+    def __getitem__(self, key):
+        i = self.vars[key]
+        return '{}_{}'.format(key, i) if i > 1 else key
+
+    def __contains__(self, key):
+        return key in self.vars
+
+    @contextmanager
+    def push(self, names):
+        for name in names:
+            self.vars[name] += 1
+        try:
+            yield
+        finally:
+            for name in names:
+                self.vars[name] -= 1
+
+
 def _write(value):
     return py.Expr(py.Call(
         py.Attribute(py.Name('buf', py.Load()), 'write', py.Load()),
@@ -26,11 +50,13 @@ def _write_str(value):
 
 
 def _ctx_load(name):
-    return py.Attribute(py.Name('ctx', py.Load()), name, py.Load())
+    return py.Subscript(py.Name('ctx', py.Load()),
+                        py.Index(py.Str(name)), py.Load())
 
 
 def _ctx_store(name):
-    return py.Attribute(py.Name('ctx', py.Load()), name, py.Store())
+    return py.Subscript(py.Name('ctx', py.Load()),
+                        py.Index(py.Str(name)), py.Store())
 
 
 def _buf_push():
@@ -58,12 +84,12 @@ def _returns_markup(node):
     return recur_check(type_)
 
 
-def _yield_writes(node):
+def _yield_writes(env, node):
     if _returns_markup(node):
-        for item in compile_stmt(node):
+        for item in compile_stmt(env, node):
             yield item
     else:
-        yield _write(compile_expr(node))
+        yield _write(compile_expr(env, node))
 
 
 class _PlaceholdersExtractor(NodeVisitor):
@@ -137,26 +163,26 @@ class _Optimizer(NodeTransformer):
         node.body = list(self._paste(node.body))
 
 
-def compile_if1_expr(node, test, then_):
-    test_expr = compile_expr(test)
-    then_expr = compile_expr(then_)
+def compile_if1_expr(env, node, test, then_):
+    test_expr = compile_expr(env, test)
+    then_expr = compile_expr(env, then_)
     else_expr = py.Name('None', py.Load())
     return py.IfExp(test_expr, then_expr, else_expr)
 
 
-def compile_if2_expr(node, test, then_, else_):
-    test_expr = compile_expr(test)
-    then_expr = compile_expr(then_)
-    else_expr = compile_expr(else_)
+def compile_if2_expr(env, node, test, then_, else_):
+    test_expr = compile_expr(env, test)
+    then_expr = compile_expr(env, then_)
+    else_expr = compile_expr(env, else_)
     return py.IfExp(test_expr, then_expr, else_expr)
 
 
-def compile_get_expr(node, obj, attr):
-    obj_expr = compile_expr(obj)
-    return py.Attribute(obj_expr, attr.name, py.Load())
+def compile_get_expr(env, node, obj, attr):
+    obj_expr = compile_expr(env, obj)
+    return py.Subscript(obj_expr, py.Index(py.Str(attr.name)), py.Load())
 
 
-def compile_func_expr(node, *norm_args):
+def compile_func_expr(env, node, *norm_args):
     sym, args = node.values[0], node.values[1:]
     pos_args, kw_args = split_args(args)
 
@@ -165,11 +191,11 @@ def compile_func_expr(node, *norm_args):
 
     pos_arg_exprs = []
     for value in pos_args:
-        pos_arg_exprs.append(compile_expr(value))
+        pos_arg_exprs.append(compile_expr(env, value))
 
     kw_arg_exprs = []
     for key, value in kw_args.items():
-        kw_arg_exprs.append(py.keyword(key, compile_expr(value)))
+        kw_arg_exprs.append(py.keyword(key, compile_expr(env, value)))
 
     return py.Call(name_expr, pos_arg_exprs, kw_arg_exprs, None, None)
 
@@ -181,20 +207,23 @@ EXPR_TYPES = {
 }
 
 
-def compile_expr(node):
+def compile_expr(env, node):
     if isinstance(node, Tuple):
         sym, args = node.values[0], node.values[1:]
         assert sym.__type__
         pos_args, kw_args = split_args(args)
         norm_args = normalize_args(sym.__type__, pos_args, kw_args)
         proc = EXPR_TYPES.get(sym.__type__, compile_func_expr)
-        return proc(node, *norm_args)
+        return proc(env, node, *norm_args)
 
     elif isinstance(node, Symbol):
-        return _ctx_load(node.name)
+        if node.name in env:
+            return py.Name(env[node.name], py.Load())
+        else:
+            return _ctx_load(node.name)
 
     elif isinstance(node, Placeholder):
-        return py.Name(node.name, py.Load())
+        return py.Name(env[node.name], py.Load())
 
     elif isinstance(node, String):
         return py.Str(node.value)
@@ -207,24 +236,21 @@ def compile_expr(node):
                         .format(node, type(node)))
 
 
-def _chain_map(fn, iterable):
-    return list(chain.from_iterable(map(fn, iterable)))
+def compile_def_stmt(env, node, name_sym, body):
+    args = [a.__arg_name__ for a in get_type(node).__args__]
+    with env.push(args):
+        py_args = [py.arg(env[arg]) for arg in args]
+        yield py.FunctionDef(name_sym.name,
+                             py.arguments(py_args, None, None, []),
+                             list(compile_stmts(env, body)), [])
 
 
-def compile_def_stmt(node, name_sym, body):
-    py_args = [py.arg(a.__arg_name__)
-               for a in node.__type__.__instance__.__args__]
-    yield py.FunctionDef(name_sym.name,
-                         py.arguments(py_args, None, None, []),
-                         _chain_map(compile_stmt, body), [])
-
-
-def compile_html_tag_stmt(node, attrs, body):
+def compile_html_tag_stmt(env, node, attrs, body):
     tag_name = node.values[0].name
     yield _write_str(u'<{}'.format(tag_name))
     for key, value in attrs.items():
         yield _write_str(u' {}="'.format(key))
-        yield _write(compile_expr(value))
+        yield _write(compile_expr(env, value))
         yield _write_str(u'"')
     if tag_name in SELF_CLOSING_ELEMENTS:
         yield _write_str(u'/>')
@@ -234,43 +260,45 @@ def compile_html_tag_stmt(node, attrs, body):
     else:
         yield _write_str(u'>')
     for arg in body:
-        for item in _yield_writes(arg):
+        for item in _yield_writes(env, arg):
             yield item
     yield _write_str(u'</{}>'.format(tag_name))
 
 
-def compile_if1_stmt(node, test, then_):
-    test_expr = compile_expr(test)
-    yield py.If(test_expr, list(_yield_writes(then_)), [])
+def compile_if1_stmt(env, node, test, then_):
+    test_expr = compile_expr(env, test)
+    yield py.If(test_expr, list(_yield_writes(env, then_)), [])
 
 
-def compile_if2_stmt(node, test, then_, else_):
-    test_expr = compile_expr(test)
-    yield py.If(test_expr, list(_yield_writes(then_)), list(_yield_writes(else_)))
+def compile_if2_stmt(env, node, test, then_, else_):
+    test_expr = compile_expr(env, test)
+    yield py.If(test_expr, list(_yield_writes(env, then_)),
+                list(_yield_writes(env, else_)))
 
 
-def compile_each_stmt(node, var, col, body):
-    yield py.For(_ctx_store(var.name), _ctx_load(col.name),
-                 _chain_map(compile_stmt, body), [])
+def compile_each_stmt(env, node, var, col, body):
+    with env.push([var.name]):
+        yield py.For(py.Name(env[var.name], py.Store()), compile_expr(env, col),
+                     list(compile_stmts(env, body)), [])
 
 
-def compile_join1_stmt(node, col):
+def compile_join1_stmt(env, node, col):
     for value in col.values:
-        for item in _yield_writes(value):
+        for item in _yield_writes(env, value):
             yield item
 
 
-def compile_join2_stmt(node, sep, col):
+def compile_join2_stmt(env, node, sep, col):
     for i, value in enumerate(col.values):
         if i:
             yield _write_str(sep.value)
-        for item in _yield_writes(value):
+        for item in _yield_writes(env, value):
             yield item
 
 
-def compile_get_stmt(node, obj, attr):
-    obj_expr = compile_expr(obj)
-    yield py.Attribute(obj_expr, attr.name, py.Load())
+def compile_get_stmt(env, node, obj, attr):
+    obj_expr = compile_expr(env, obj)
+    yield py.Subscript(obj_expr, py.Index(py.Str(attr.name)), py.Load())
 
 
 STMT_TYPES = {
@@ -285,7 +313,7 @@ STMT_TYPES = {
 }
 
 
-def compile_func_stmt(node, *norm_args):
+def compile_func_stmt(env, node, *norm_args):
     sym = node.values[0]
 
     pos_args, kw_args = [], {}
@@ -313,11 +341,11 @@ def compile_func_stmt(node, *norm_args):
     for key, (type_, value) in kw_args.items():
         if _returns_markup(value):
             yield _buf_push()
-            for item in _yield_writes(value):
+            for item in _yield_writes(env, value):
                 yield item
             kw_arg_exprs.append(py.keyword(key, _buf_pop()))
         else:
-            kw_arg_exprs.append(py.keyword(key, compile_expr(value)))
+            kw_arg_exprs.append(py.keyword(key, compile_expr(env, value)))
 
     pos_arg_exprs = []
     # capturing args in reversed order to preserve proper ordering
@@ -325,11 +353,11 @@ def compile_func_stmt(node, *norm_args):
     for type_, value in reversed(pos_args):
         if _returns_markup(value):
             yield _buf_push()
-            for item in _yield_writes(value):
+            for item in _yield_writes(env, value):
                 yield item
             pos_arg_exprs.append(_buf_pop())
         else:
-            pos_arg_exprs.append(compile_expr(value))
+            pos_arg_exprs.append(compile_expr(env, value))
 
     # applying args in reversed order to preserve pushes/pops
     # consistency
@@ -340,7 +368,7 @@ def compile_func_stmt(node, *norm_args):
     yield (py.Expr(py_call) if sym.ns else py_call)
 
 
-def compile_stmt(node):
+def compile_stmt(env, node):
     if isinstance(node, Tuple):
         sym, args = node.values[0], node.values[1:]
         assert sym.__type__
@@ -349,14 +377,17 @@ def compile_stmt(node):
         norm_args = normalize_args(sym.__type__, pos_args, kw_args)
 
         proc = STMT_TYPES.get(sym.__type__, compile_func_stmt)
-        for item in proc(node, *norm_args):
+        for item in proc(env, node, *norm_args):
             yield item
 
     elif isinstance(node, Symbol):
-        yield _write(_ctx_load(node.name))
+        if node.name in env:
+            yield _write(py.Name(env[node.name], py.Load()))
+        else:
+            yield _write(_ctx_load(node.name))
 
     elif isinstance(node, Placeholder):
-        yield _write(py.Name(node.name, py.Load()))
+        yield _write(py.Name(env[node.name], py.Load()))
 
     elif isinstance(node, String):
         yield _write(py.Str(node.value))
@@ -369,9 +400,16 @@ def compile_stmt(node):
                         .format(node, type(node)))
 
 
+def compile_stmts(env, nodes):
+    for node in nodes:
+        for item in compile_stmt(env, node):
+            yield item
+
+
 def compile_module(body):
     assert isinstance(body, List), repr(body)
-    mod = py.Module(_chain_map(compile_stmt, body.values))
+    env = Environ()
+    mod = py.Module(list(compile_stmts(env, body.values)))
     mod = _Optimizer().visit(mod)
     py.fix_missing_locations(mod)
     return mod

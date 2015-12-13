@@ -51,7 +51,7 @@ class TestCompile(ParseMixin, TestCase):
             """,
             u"""
             buf.write('<div foo="bar">')
-            buf.write(ctx.baz)
+            buf.write(ctx['baz'])
             buf.write('</div>')
             """,
             {'baz': StringType},
@@ -94,9 +94,9 @@ class TestCompile(ParseMixin, TestCase):
             """,
             u"""
             buf.write('<div>')
-            for ctx.i in ctx.items:
+            for i in ctx['items']:
                 buf.write('<div>')
-                buf.write(ctx.i)
+                buf.write(i)
                 buf.write('</div>')
             buf.write('</div>')
             """,
@@ -132,7 +132,7 @@ class TestCompile(ParseMixin, TestCase):
                 buf.write('<div>')
                 buf.write(bar)
                 buf.write('</div>')
-                for ctx.i in ctx.items:
+                for i in ctx['items']:
                     buf.write('<div>')
                     buf.write(baz)
                     buf.write('</div>')
@@ -240,7 +240,7 @@ class TestCompile(ParseMixin, TestCase):
             """,
             u"""
             buf.write('<div class="')
-            buf.write(ctx.foo.bar.baz)
+            buf.write(ctx['foo']['bar']['baz'])
             buf.write('"></div>')
             """,
             {'foo': Record[{'bar': Record[{'baz': StringType}]}]},
@@ -259,8 +259,7 @@ class TestCompile(ParseMixin, TestCase):
         mod = compile_module(node)
         mod_code = compile(mod, '<kinko-template>', 'exec')
 
-        ctx = Mock()
-        ctx.items = [1, 2, u"Привет"]
+        ctx = {'items': [1, 2, u"Привет"]}
 
         buf = Buffer()
         buf.push()
