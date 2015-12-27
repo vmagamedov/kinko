@@ -1,3 +1,5 @@
+from json.encoder import encode_basestring_ascii
+
 from .compat import texttype
 
 
@@ -41,11 +43,7 @@ class String(Node):
         super(String, self).__init__(**kw)
 
     def __repr__(self):
-        return '"{}"'.format(
-            repr(self.value).lstrip('u')[1:-1]
-            .replace('\\"', '"').replace("\\'", "'")
-            .replace('"', '\\"')
-        )
+        return encode_basestring_ascii(self.value)
 
     def accept(self, visitor):
         return visitor.visit_string(self)
