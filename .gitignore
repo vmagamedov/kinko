@@ -1,5 +1,7 @@
 build
 dist
+node_modules
+sandbox*
 .vagga
 *.egg-info
 *.pyc
