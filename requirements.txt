@@ -1,4 +1,5 @@
 mock # except for python3.4
 funcparserlib
+slimit
 astor
 nose

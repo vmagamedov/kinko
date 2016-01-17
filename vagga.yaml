@@ -22,3 +22,4 @@ containers:
       - !Py3Install
         - funcparserlib
         - astor
+        - slimit
