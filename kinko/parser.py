@@ -79,8 +79,11 @@ def _module(values, eof):
 
 
 def parser():
-    apl = lambda f: (lambda x: f(*x))
-    delim = lambda t: skip(_tok(t))
+    def apl(f):
+        return lambda x: f(*x)
+
+    def delim(t):
+        return skip(_tok(t))
 
     symbol = _tok(Token.SYMBOL) >> _dotted(Symbol)
     string = _tok(Token.STRING) >> _gen(String)
@@ -96,26 +99,26 @@ def parser():
 
     list_ = ((_tok(Token.OPEN_BRACKET) +
               many(expr | keyword) +
-              delim(Token.CLOSE_BRACKET))
-             >> apl(_list))
+              delim(Token.CLOSE_BRACKET)) >>
+             apl(_list))
 
     dict_ = ((_tok(Token.OPEN_BRACE) +
               many(keyword + expr) +
-              delim(Token.CLOSE_BRACE))
-             >> apl(_dict))
+              delim(Token.CLOSE_BRACE)) >>
+             apl(_dict))
 
     inline_args = many(expr | keyword)
 
     explicit_tuple = (
         (_tok(Token.OPEN_PAREN) +
          symbol + inline_args +
-         delim(Token.CLOSE_PAREN))
-        >> apl(_tuple)
+         delim(Token.CLOSE_PAREN)) >>
+        apl(_tuple)
     )
 
     indented_arg = (
-        oneplus(implicit_tuple | expr + delim(Token.NEWLINE))
-        >> _maybe_join
+        oneplus(implicit_tuple | expr + delim(Token.NEWLINE)) >>
+        _maybe_join
     )
 
     indented_kwarg = (
@@ -125,23 +128,23 @@ def parser():
     )
 
     indented_args_kwargs = (
-        (many(indented_kwarg) + many(indented_arg))
-        >> apl(lambda pairs, args: list(chain(*(pairs + [args]))))
+        (many(indented_kwarg) + many(indented_arg)) >>
+        apl(lambda pairs, args: list(chain(*(pairs + [args]))))
     )
 
     implicit_tuple.define(
         (symbol + inline_args + delim(Token.NEWLINE) +
          maybe(delim(Token.INDENT) +
                indented_args_kwargs +
-               delim(Token.DEDENT)))
-        >> apl(_implicit_tuple)
+               delim(Token.DEDENT))) >>
+        apl(_implicit_tuple)
     )
 
     expr.define(symbol | string | number | explicit_tuple | list_ | dict_ |
                 placeholder)
 
     body = (
-        (many(implicit_tuple) + _tok(Token.EOF))
-        >> apl(_module)
+        (many(implicit_tuple) + _tok(Token.EOF)) >>
+        apl(_module)
     )
     return body

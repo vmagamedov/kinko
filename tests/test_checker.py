@@ -290,7 +290,7 @@ class TestChecker(ParseMixin, TestCase):
             """
             if (inc 1) (inc 2) (inc 3)
             """,
-            Tuple.typed(Union[IntType,], [
+            Tuple.typed(Union[IntType, ], [
                 Symbol.typed(IF2_TYPE, 'if'),
                 Tuple.typed(IntType, [
                     Symbol.typed(inc_type, 'inc'),
@@ -328,7 +328,7 @@ class TestChecker(ParseMixin, TestCase):
                 ]),
                 Tuple.typed(IntType, [
                     Symbol.typed(inc_type, 'inc'),
-                    Symbol.typed(Union[IntType,], 'x'),
+                    Symbol.typed(Union[IntType, ], 'x'),
                 ]),
             ]),
             env,
@@ -369,7 +369,7 @@ class TestChecker(ParseMixin, TestCase):
             """,
             Tuple.typed(IntType, [
                 Symbol.typed(foo_type, 'foo'),
-                List.typed(ListType[Union[IntType,]], [
+                List.typed(ListType[Union[IntType, ]], [
                     Number.typed(IntType, 1),
                     Number.typed(IntType, 2),
                     Number.typed(IntType, 3),

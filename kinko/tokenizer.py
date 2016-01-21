@@ -75,6 +75,7 @@ class _Interrupt(Exception):
 
 _Position = namedtuple('Position', 'offset line column')
 
+
 class Position(_Position):
 
     def __index__(self):
@@ -139,15 +140,16 @@ def read_string(char_iter, start, quote):
             except StopIteration:
                 break
         elif ch == quote:
-            return Token(Token.STRING,
-                char_iter.string[start.offset + 1: char_iter.next_position.offset - 1],
-                char_iter.location_from(start))
+            quote_from = start.offset + 1
+            quote_to = char_iter.next_position.offset - 1
+            return Token(Token.STRING, char_iter.string[quote_from: quote_to],
+                         char_iter.location_from(start))
         elif ch == '\n':
             raise TokenizerError(char_iter.location_from(start),
-                "Newlines are not allowed in strings")
+                                 "Newlines are not allowed in strings")
 
     raise TokenizerError(char_iter.location_from(start),
-        "String does not and at EOF")
+                         "String does not and at EOF")
 
 
 def tokenize(string):
@@ -163,9 +165,9 @@ def tokenize(string):
                         if ch == '\n':
                             break
                         raise TokenizerError(char_iter.location_from(start),
-                            "Please indent by spaces. "
-                            "Forget about that crappy {!r} characters"
-                            .format(ch))
+                                             "Please indent by spaces. Forget "
+                                             "about that crappy {!r} characters"
+                                             .format(ch))
                     end = pos
                     try:
                         pos, ch = next(char_iter)
@@ -196,8 +198,8 @@ def tokenize(string):
                         ident_pos = indents.index(new_indent)
                     except IndexError:
                         raise TokenizerError(loc,
-                            "Unindent doesn't match any previous level "
-                            "of indentation")
+                                             "Unindent doesn't match any "
+                                             "previous level of indentation")
                     else:
                         for _i in range(ident_pos+1, len(indents)):
                             yield Token(Token.DEDENT, '', loc)
@@ -235,15 +237,16 @@ def tokenize(string):
                 bch, bpos = brackets.pop()
                 if MATCHING_BRACKET[bch] != ch:
                     raise TokenizerError(char_iter.location_from(bpos),
-                        "Unmatching parenthesis, expected {!r} got {!r}"
-                        .format(MATCHING_BRACKET[bch], ch))
+                                         "Unmatching parenthesis, expected "
+                                         "{!r} got {!r}"
+                                         .format(MATCHING_BRACKET[bch], ch))
             else:
                 raise TokenizerError(char_iter.location_from(pos),
-                    "No parenthesis matching {!r}".format(ch))
+                                     "No parenthesis matching {!r}".format(ch))
             yield Token(BRACKET_TYPES[ch], ch, char_iter.location_from(pos))
         else:
             raise TokenizerError(char_iter.location_from(pos),
-                "Wrong character {!r}".format(ch))
+                                 "Wrong character {!r}".format(ch))
     else:
         eof_pos = char_iter.location_from(char_iter.next_position)
         if char_iter.next_position.column != 1:

@@ -103,7 +103,8 @@ class _PlaceholdersExtractor(NodeVisitor):
             self.placeholders.append(node.name)
 
 
-_cls_eq = lambda i, name: i.__class__.__name__ == name
+def _cls_eq(i, name):
+    return i.__class__.__name__ == name
 
 
 def _node_copy(func):
