@@ -1,56 +1,66 @@
-import cgi
-import sys
-import json
-import codecs
-import traceback
-from os.path import abspath
+from collections import namedtuple
 
-from .utils import Buffer
-from .compat import _exec_in
+import click
+import astor
+
 from .parser import parser
+from .checker import check, Environ
 from .compiler import compile_module
 from .tokenizer import tokenize
 
 
-try:
-    _, src_file, func_name, ctx_file, out_file = sys.argv
-except ValueError:
-    print("Usage: python -m kinko SRCFILE FUNCNAME CTXFILE OUTFILE")
-    sys.exit(1)
+def maybe_exit(ctx, exit_code=-1):
+    if not ctx.obj.debug:
+        ctx.exit(exit_code)
 
 
-class Object(dict):
-
-    def __getattr__(self, name):
-        try:
-            return self[name]
-        except KeyError:
-            raise AttributeError('Unknown context variable: {}'.format(name))
+GlobalOptions = namedtuple('GlobalOptions', 'verbose debug')
 
 
-with codecs.open(src_file, encoding='utf-8') as f:
-    src = f.read()
+@click.group()
+@click.option('-v', '--verbose', is_flag=True)
+@click.option('--debug', is_flag=True)
+@click.pass_context
+def cli(ctx, verbose, debug):
+    ctx.obj = GlobalOptions(verbose, debug)
 
-with codecs.open(ctx_file, encoding='utf-8') as f:
-    ctx = json.loads(f.read(), object_hook=Object)
 
-try:
-    tokens = list(tokenize(src))
-    mod = compile_module(parser().parse(tokens))
-    mod_code = compile(mod, abspath(src_file), 'exec')
+@cli.command('compile')
+@click.argument('source', type=click.File(encoding='utf-8'))
+@click.argument('output', type=click.File(mode='w+', encoding='utf-8'),
+                default='-')
+@click.pass_context
+def compile_(ctx, source, output):
+    try:
+        tokens = list(tokenize(source.read()))
+        node = parser().parse(tokens)
+    except Exception:
+        # TODO: print pretty parsing error
+        click.echo('Failed to parse source file', err=True)
+        maybe_exit(ctx, -1)
+        raise
 
-    buf = Buffer()
-    buf.push()
-    ns = {'buf': buf, 'ctx': ctx, 'builtins': object()}
-    _exec_in(mod_code, ns)
-    ns[func_name]()
-    output = buf.pop()
-except Exception:
-    output = (
-        "<html><head></head><body><pre>{tb}</pre></body></html>"
-        .format(tb=cgi.escape(traceback.format_exc()))
-    )
-    raise
-finally:
-    with codecs.open(out_file, 'wb+', encoding='utf-8') as f:
-        f.write(output)
+    try:
+        # TODO: implement environ definition
+        node = check(node, Environ({}))
+    except TypeError:
+        # TODO: print pretty type checking error
+        click.echo('Failed to check source file', err=True)
+        maybe_exit(ctx, -2)
+        raise
+
+    try:
+        module = compile_module(node)
+        compile(module, '<tmp>', 'exec')
+    except Exception:
+        click.echo('Failed to compile module. Please submit bug report.',
+                   err=True)
+        maybe_exit(ctx, -3)
+        raise
+    else:
+        output.write(astor.to_source(module))
+        output.write('\n')
+
+
+if __name__ == '__main__':
+    cli.main(prog_name='python -m kinko')
