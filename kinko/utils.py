@@ -2,7 +2,7 @@ import io
 
 from .nodes import Keyword
 from .types import TypeVar
-from .compat import texttype
+from .compat import text_type
 
 
 class Buffer(object):
@@ -11,7 +11,7 @@ class Buffer(object):
         self.stack = []
 
     def write(self, s):
-        self.stack[-1].write(texttype(s))
+        self.stack[-1].write(text_type(s))
 
     def push(self):
         self.stack.append(io.StringIO())

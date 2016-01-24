@@ -8,7 +8,7 @@ from .types import NamedArgMeta, VarArgsMeta, VarNamedArgsMeta, MarkupMeta
 from .types import UnionMeta
 from .nodes import String, Tuple, Symbol, List, Number, Placeholder
 from .nodes import NodeVisitor
-from .compat import ast as py, texttype
+from .compat import ast as py, text_type
 from .checker import split_args, normalize_args, DEF_TYPE, HTML_TAG_TYPE
 from .checker import IF1_TYPE, IF2_TYPE, EACH_TYPE, JOIN1_TYPE, JOIN2_TYPE
 from .checker import GET_TYPE, get_type
@@ -137,7 +137,7 @@ class _Optimizer(NodeTransformer):
                 if _cls_eq(item.value.args[0], 'Str'):
                     chunks.append(item.value.args[0].s)
                 else:
-                    chunks.append(texttype(item.value.args[0].n))
+                    chunks.append(text_type(item.value.args[0].n))
             else:
                 if chunks:
                     yield _write_str(u''.join(chunks))

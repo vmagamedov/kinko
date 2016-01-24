@@ -70,10 +70,10 @@ if PY3:
     def _exec_in(source, globals_dict):
         getattr(builtins, 'exec')(source, globals_dict)
 
-    texttype = str
+    text_type = str
 
 else:
     def _exec_in(source, globals_dict):
         exec('exec source in globals_dict')
 
-    texttype = unicode
+    text_type = unicode  # noqa

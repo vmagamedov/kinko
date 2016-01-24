@@ -1,6 +1,6 @@
 from json.encoder import encode_basestring_ascii
 
-from .compat import texttype
+from .compat import text_type
 
 
 class Node(object):
@@ -39,7 +39,7 @@ class Symbol(Node):
 class String(Node):
 
     def __init__(self, value, **kw):
-        self.value = texttype(value)
+        self.value = text_type(value)
         super(String, self).__init__(**kw)
 
     def __repr__(self):

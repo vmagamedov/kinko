@@ -4,7 +4,7 @@ from slimit import ast as js
 
 from ...utils import split_args
 from ...nodes import Tuple, Symbol, Placeholder, String, Number
-from ...compat import texttype
+from ...compat import text_type
 from ...checker import HTML_TAG_TYPE, GET_TYPE, IF1_TYPE, IF2_TYPE, JOIN1_TYPE
 from ...checker import JOIN2_TYPE, get_type, DEF_TYPE
 from ...checker import normalize_args
@@ -77,7 +77,7 @@ def compile_func_expr(env, node, *norm_args):
                      for value in pos_args]
 
     compiled_args.append(js.Object([
-        js.Label(_str(texttype(key)), compile_expr(env, value))
+        js.Label(_str(text_type(key)), compile_expr(env, value))
         for key, value in kw_args.items()
     ]))
     return js.FunctionCall(name_expr, compiled_args)
@@ -109,10 +109,10 @@ def compile_expr(env, node):
         return js.Identifier(env[node.name])
 
     elif isinstance(node, String):
-        return _str(texttype(node.value))
+        return _str(text_type(node.value))
 
     elif isinstance(node, Number):
-        return js.Number(texttype(node.value))
+        return js.Number(text_type(node.value))
 
     else:
         raise TypeError('Unable to compile {!r} of type {!r} as expression'
@@ -133,7 +133,7 @@ def compile_html_tag_stmt(env, node, attrs, body):
 
     compiled_attrs = []
     for key, value in attrs.items():
-        compiled_attrs.append(_str(texttype(key)))
+        compiled_attrs.append(_str(text_type(key)))
         compiled_attrs.append(compile_expr(env, value))
 
     yield _el_open(tag_name, None, compiled_attrs,
