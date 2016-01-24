@@ -1,12 +1,17 @@
+import importlib
 from collections import namedtuple
 
 import click
-import astor
 
 from .parser import parser
 from .checker import check, Environ
 from .tokenizer import tokenize
-from .out.py.compiler import compile_module
+
+
+COMPILERS = {
+    'py': 'kinko.out.py.compiler',
+    'js': 'kinko.out.js.incremental_dom',
+}
 
 
 def maybe_exit(ctx, exit_code=-1):
@@ -26,18 +31,20 @@ def cli(ctx, verbose, debug):
 
 
 @cli.command('compile')
+@click.argument('type_', type=click.Choice(list(COMPILERS.keys())),
+                metavar='TYPE')
 @click.argument('source', type=click.File(encoding='utf-8'))
 @click.argument('output', type=click.File(mode='w+', encoding='utf-8'),
                 default='-')
 @click.pass_context
-def compile_(ctx, source, output):
+def compile_(ctx, type_, source, output):
     try:
         tokens = list(tokenize(source.read()))
         node = parser().parse(tokens)
     except Exception:
         # TODO: print pretty parsing error
-        click.echo('Failed to parse source file', err=True)
-        maybe_exit(ctx, -1)
+        click.echo('Failed to parse source file.', err=True)
+        maybe_exit(ctx)
         raise
 
     try:
@@ -45,21 +52,28 @@ def compile_(ctx, source, output):
         node = check(node, Environ({}))
     except TypeError:
         # TODO: print pretty type checking error
-        click.echo('Failed to check source file', err=True)
-        maybe_exit(ctx, -2)
+        click.echo('Failed to check source file.', err=True)
+        maybe_exit(ctx)
+        raise
+
+    compiler_path = COMPILERS[type_]
+    try:
+        compiler = importlib.import_module(compiler_path)
+    except Exception:
+        click.echo('Failed to load "{}" compiler.'.format(compiler_path),
+                   err=True)
+        maybe_exit(ctx)
         raise
 
     try:
-        module = compile_module(node)
-        compile(module, '<tmp>', 'exec')
+        module = compiler.compile_module(node)
     except Exception:
         click.echo('Failed to compile module. Please submit bug report.',
                    err=True)
-        maybe_exit(ctx, -3)
+        maybe_exit(ctx)
         raise
     else:
-        output.write(astor.to_source(module))
-        output.write('\n')
+        output.write(compiler.dumps(module))
 
 
 if __name__ == '__main__':

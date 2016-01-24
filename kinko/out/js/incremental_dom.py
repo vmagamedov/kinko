@@ -232,4 +232,4 @@ def compile_module(body):
 
 
 def dumps(node):
-    return node.to_ecma()
+    return node.to_ecma() + '\n'

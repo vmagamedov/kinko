@@ -386,4 +386,4 @@ def compile_module(body):
 
 
 def dumps(node):
-    return astor.to_source(node)
+    return astor.to_source(node) + '\n'
