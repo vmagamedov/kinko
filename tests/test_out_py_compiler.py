@@ -21,7 +21,7 @@ class TestCompile(ParseMixin, TestCase):
         node = self.parse(src)
         node = check(node, Environ(env or {}))
         mod = compile_module(node)
-        first = dumps(mod)
+        first = dumps(mod).strip()
         if not PY3:
             first = first.replace("u'", "'")
         try:

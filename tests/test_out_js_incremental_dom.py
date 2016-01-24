@@ -16,7 +16,7 @@ class TestIncrementalDOM(ParseMixin, TestCase):
         node = self.parse(src)
         node = check(node, Environ(env or {}))
         mod = compile_module(node)
-        first = dumps(mod)
+        first = dumps(mod).strip()
         second = dedent(code).strip()
         if first != second:
             msg = ('Compiled code is not equal:\n\n{}'
