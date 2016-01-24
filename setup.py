@@ -10,4 +10,8 @@ setup(
     packages=['kinko'],
     license='BSD',
     install_requires=['funcparserlib', 'astor'],
+    extras_require={
+        'js': ['slimit'],
+        'cli': ['click'],
+    }
 )
