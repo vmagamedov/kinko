@@ -5,8 +5,8 @@ import astor
 
 from .parser import parser
 from .checker import check, Environ
-from .compiler import compile_module
 from .tokenizer import tokenize
+from .out.py.compiler import compile_module
 
 
 def maybe_exit(ctx, exit_code=-1):

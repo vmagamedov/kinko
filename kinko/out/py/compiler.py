@@ -1,41 +1,22 @@
+from __future__ import absolute_import
+
 from ast import NodeTransformer, iter_fields, copy_location
-from contextlib import contextmanager
-from collections import Counter
+from ast import fix_missing_locations
 
 import astor
 
-from .types import NamedArgMeta, VarArgsMeta, VarNamedArgsMeta, MarkupMeta
-from .types import UnionMeta
-from .nodes import String, Tuple, Symbol, List, Number, Placeholder
-from .nodes import NodeVisitor
-from .compat import ast as py, text_type
-from .checker import split_args, normalize_args, DEF_TYPE, HTML_TAG_TYPE
-from .checker import IF1_TYPE, IF2_TYPE, EACH_TYPE, JOIN1_TYPE, JOIN2_TYPE
-from .checker import GET_TYPE, get_type
-from .constant import SELF_CLOSING_ELEMENTS
+from ...types import NamedArgMeta, VarArgsMeta, VarNamedArgsMeta
+from ...nodes import String, Tuple, Symbol, List, Number, Placeholder
+from ...nodes import NodeVisitor
+from ...compat import text_type
+from ...checker import split_args, normalize_args, DEF_TYPE, HTML_TAG_TYPE
+from ...checker import IF1_TYPE, IF2_TYPE, EACH_TYPE, JOIN1_TYPE, JOIN2_TYPE
+from ...checker import GET_TYPE, get_type
+from ...constant import SELF_CLOSING_ELEMENTS
 
+from ..common import Environ, returns_markup
 
-class Environ(object):
-
-    def __init__(self):
-        self.vars = Counter()
-
-    def __getitem__(self, key):
-        i = self.vars[key]
-        return '{}_{}'.format(key, i) if i > 1 else key
-
-    def __contains__(self, key):
-        return key in self.vars
-
-    @contextmanager
-    def push(self, names):
-        for name in names:
-            self.vars[name] += 1
-        try:
-            yield
-        finally:
-            for name in names:
-                self.vars[name] -= 1
+from . import ast as py
 
 
 def _write(value):
@@ -72,20 +53,8 @@ def _buf_pop():
                    [], [], None, None)
 
 
-def _returns_markup(node):
-    type_ = get_type(node)
-
-    def recur_check(t):
-        if isinstance(t, UnionMeta):
-            return any(recur_check(st) for st in t.__types__)
-        else:
-            return isinstance(t, MarkupMeta)
-
-    return recur_check(type_)
-
-
 def _yield_writes(env, node):
-    if _returns_markup(node):
+    if returns_markup(node):
         for item in compile_stmt(env, node):
             yield item
     else:
@@ -340,7 +309,7 @@ def compile_func_stmt(env, node, *norm_args):
 
     kw_arg_exprs = []
     for key, (type_, value) in kw_args.items():
-        if _returns_markup(value):
+        if returns_markup(value):
             yield _buf_push()
             for item in _yield_writes(env, value):
                 yield item
@@ -352,7 +321,7 @@ def compile_func_stmt(env, node, *norm_args):
     # capturing args in reversed order to preserve proper ordering
     # during second reverse
     for type_, value in reversed(pos_args):
-        if _returns_markup(value):
+        if returns_markup(value):
             yield _buf_push()
             for item in _yield_writes(env, value):
                 yield item
@@ -412,7 +381,7 @@ def compile_module(body):
     env = Environ()
     mod = py.Module(list(compile_stmts(env, body.values)))
     mod = _Optimizer().visit(mod)
-    py.fix_missing_locations(mod)
+    fix_missing_locations(mod)
     return mod
 
 

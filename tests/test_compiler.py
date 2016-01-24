@@ -9,7 +9,7 @@ from kinko.types import StringType, ListType, VarNamedArgs, Func, Record
 from kinko.types import IntType, Union, Markup, NamedArg
 from kinko.compat import _exec_in, PY3
 from kinko.checker import check, Environ
-from kinko.compiler import compile_module, dumps
+from kinko.out.py.compiler import compile_module, dumps
 
 from .base import TestCase
 from .test_parser import ParseMixin

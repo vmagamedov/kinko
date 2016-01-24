@@ -8,8 +8,9 @@ from ...compat import text_type
 from ...checker import HTML_TAG_TYPE, GET_TYPE, IF1_TYPE, IF2_TYPE, JOIN1_TYPE
 from ...checker import JOIN2_TYPE, get_type, DEF_TYPE
 from ...checker import normalize_args
-from ...compiler import Environ, _returns_markup
 from ...constant import SELF_CLOSING_ELEMENTS
+
+from ..common import Environ, returns_markup
 
 
 def _str(value):
@@ -25,7 +26,7 @@ def _ctx_var(value):
 
 
 def _yield_writes(env, node):
-    if _returns_markup(node):
+    if returns_markup(node):
         for item in compile_stmt(env, node):
             yield item
     else:
