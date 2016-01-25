@@ -1,12 +1,12 @@
 from textwrap import dedent
 
 from kinko.types import Record, StringType, IntType, ListType, Func
-from kinko.load.types import load_types
+from kinko.typedef import load_types
 
 from .base import TestCase, TYPE_EQ_PATCHER
 
 
-class TestLoadTypes(TestCase):
+class TestTypeDefinition(TestCase):
     ctx = [TYPE_EQ_PATCHER]
 
     def test(self):

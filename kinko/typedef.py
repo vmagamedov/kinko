@@ -1,8 +1,8 @@
-from .. import types
-from ..utils import split_args, VarsGen
-from ..nodes import NodeTransformer, Symbol
-from ..parser import parser
-from ..tokenizer import tokenize
+from . import types
+from .utils import split_args, VarsGen
+from .nodes import NodeTransformer, Symbol
+from .parser import parser
+from .tokenizer import tokenize
 
 
 TYPES = {
