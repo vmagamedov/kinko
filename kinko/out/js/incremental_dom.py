@@ -6,7 +6,7 @@ from ...utils import split_args
 from ...nodes import Tuple, Symbol, Placeholder, String, Number
 from ...compat import text_type
 from ...checker import HTML_TAG_TYPE, GET_TYPE, IF1_TYPE, IF2_TYPE, JOIN1_TYPE
-from ...checker import JOIN2_TYPE, get_type, DEF_TYPE
+from ...checker import JOIN2_TYPE, get_type, DEF_TYPE, EACH_TYPE
 from ...checker import normalize_args
 from ...constant import SELF_CLOSING_ELEMENTS
 
@@ -162,6 +162,25 @@ def compile_if2_stmt(env, node, test, then_, else_):
                 js.Block(list(_yield_writes(env, else_))))
 
 
+def compile_each_stmt(env, node, var, col, body):
+    col_expr = compile_expr(env, col)
+    with env.push(['_i']):
+        i_expr = js.Identifier(env['_i'])
+        with env.push([var.name]):
+            var_stmt = js.VarStatement([
+                js.Assign('=', js.Identifier(env[var.name]),
+                          js.BracketAccessor(col_expr, i_expr)),
+            ])
+            yield js.For(
+                js.VarStatement([js.VarDecl(i_expr, js.Number('0'))]),
+                js.BinOp('<', i_expr,
+                         js.DotAccessor(col_expr,
+                                        js.Identifier('length'))),
+                js.UnaryOp('++', i_expr, postfix=True),
+                js.Block([var_stmt] + list(compile_stmts(env, body))),
+            )
+
+
 def compile_join1_stmt(env, node, col):
     for value in col.values:
         for item in _yield_writes(env, value):
@@ -181,6 +200,7 @@ STMT_TYPES = {
     HTML_TAG_TYPE: compile_html_tag_stmt,
     IF1_TYPE: compile_if1_stmt,
     IF2_TYPE: compile_if2_stmt,
+    EACH_TYPE: compile_each_stmt,
     JOIN1_TYPE: compile_join1_stmt,
     JOIN2_TYPE: compile_join2_stmt,
 }

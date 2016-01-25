@@ -68,25 +68,25 @@ class TestIncrementalDOM(ParseMixin, TestCase):
             """,
         )
 
-    # def testEach(self):
-    #     self.assertCompiles(
-    #         """
-    #         div
-    #           each i items
-    #             div i
-    #         """,
-    #         """
-    #         elementOpen("div", "", [], []);
-    #         for (var __i=0; __i < ctx['items'].length; __i++) {
-    #             var i = ctx['items'][__i];
-    #             elementOpen("div", "", [], []);
-    #             text(i);
-    #             elementClose("div");
-    #         }
-    #         elementClose("div");
-    #         """,
-    #         {'items': ListType[StringType]},
-    #     )
+    def testEach(self):
+        self.assertCompiles(
+            """
+            div
+              each i items
+                div i
+            """,
+            """
+            elementOpen("div", "", [], []);
+            for (var _i = 0; _i < ctx["items"].length; _i++) {
+              var i = ctx["items"][_i];
+              elementOpen("div", "", [], []);
+              text(i);
+              elementClose("div");
+            }
+            elementClose("div");
+            """,
+            {'items': ListType[StringType]},
+        )
 
     def testBuiltinFuncCall(self):
         self.assertCompiles(
