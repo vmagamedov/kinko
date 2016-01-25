@@ -109,14 +109,20 @@ class TestIncrementalDOM(ParseMixin, TestCase):
             def foo
               div
                 #bar
-              ; each i items
-              ;   div
-              ;     #baz
+                each i items
+                  div
+                    #baz
             """,
             """
-            function foo(bar) {
+            function foo(bar, baz) {
               elementOpen("div", "", [], []);
               bar();
+              for (var _i = 0; _i < ctx["items"].length; _i++) {
+                var i = ctx["items"][_i];
+                elementOpen("div", "", [], []);
+                baz();
+                elementClose("div");
+              }
               elementClose("div");
             }
             """,
