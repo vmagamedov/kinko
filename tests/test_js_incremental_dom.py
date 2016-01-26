@@ -3,6 +3,7 @@ import difflib
 from textwrap import dedent
 
 from kinko.types import StringType, ListType, Func, VarNamedArgs, Record
+from kinko.types import IntType, NamedArg, Markup
 from kinko.checker import check, Environ
 from kinko.out.js.incremental_dom import compile_module, dumps
 
@@ -106,16 +107,16 @@ class TestIncrementalDOM(ParseMixin, TestCase):
     def testFuncDef(self):
         self.assertCompiles(
             """
-            def foo
-              div
+            def func
+              div :class #foo
                 #bar
                 each i items
                   div
                     #baz
             """,
             """
-            function foo(bar, baz) {
-              elementOpen("div", "", [], []);
+            function func(foo, bar, baz) {
+              elementOpen("div", "", [], ["class",foo]);
               bar();
               for (var _i = 0; _i < ctx["items"].length; _i++) {
                 var i = ctx["items"][_i];
@@ -129,35 +130,29 @@ class TestIncrementalDOM(ParseMixin, TestCase):
             {'items': ListType[Record[{}]]},
         )
 
-    # def testFuncCall(self):
-    #     self.assertCompiles(
-    #         """
-    #         div
-    #           foo/bar 1 2
-    #             :param1
-    #               div
-    #                 ./baz 3 4
-    #                   :param2
-    #                     span "Test"
-    #         """,
-    #         """
-    #         elementOpen("div", "", [], []);
-    #         foo.bar(1, 2, function() {
-    #           elementOpen("div", "", [], []);
-    #           baz(3, 4, function() {
-    #             elementOpen("span", "", [], []);
-    #             text("Test");
-    #             elementClose("span");
-    #           });
-    #           elementClose("div");
-    #         });
-    #         elementClose("div");
-    #         """,
-    #         {'foo/bar': Func[[IntType, IntType, NamedArg['param1', Markup]],
-    #                          Markup],
-    #          './baz': Func[[IntType, IntType, NamedArg['param2', Markup]],
-    #                        Markup]},
-    #     )
+    def testFuncCall(self):
+        self.assertCompiles(
+            """
+            div
+              foo/bar 1 2
+                :param1
+                  div
+                    ./baz 3 4 :param2 "Test"
+            """,
+            """
+            elementOpen("div", "", [], []);
+            foo.bar(1, 2, function() {
+              elementOpen("div", "", [], []);
+              baz(3, 4, "Test");
+              elementClose("div");
+            });
+            elementClose("div");
+            """,
+            {'foo/bar': Func[[IntType, IntType, NamedArg['param1', Markup]],
+                             Markup],
+             './baz': Func[[IntType, IntType, NamedArg['param2', StringType]],
+                           Markup]},
+        )
 
     def testIf(self):
         self.assertCompiles(

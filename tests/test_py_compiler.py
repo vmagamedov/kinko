@@ -122,16 +122,18 @@ class TestCompile(ParseMixin, TestCase):
     def testFuncDef(self):
         self.assertCompiles(
             """
-            def foo
-              div
+            def func
+              div :class #foo
                 #bar
               each i items
                 div
                   #baz
             """,
             """
-            def foo(bar, baz):
-                buf.write('<div>')
+            def func(foo, bar, baz):
+                buf.write('<div class="')
+                buf.write(foo)
+                buf.write('">')
                 buf.write(bar)
                 buf.write('</div>')
                 for i in ctx['items']:

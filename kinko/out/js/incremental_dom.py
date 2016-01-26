@@ -2,6 +2,7 @@ from json.encoder import encode_basestring
 
 from slimit import ast as js
 
+from ...types import NamedArgMeta, VarArgsMeta, VarNamedArgsMeta
 from ...utils import split_args
 from ...nodes import Tuple, Symbol, Placeholder, String, Number
 from ...compat import text_type
@@ -10,7 +11,7 @@ from ...checker import JOIN2_TYPE, get_type, DEF_TYPE, EACH_TYPE
 from ...checker import normalize_args
 from ...constant import SELF_CLOSING_ELEMENTS
 
-from ..common import Environ, returns_markup
+from ..common import Environ, returns_markup, contains_markup
 
 
 def _str(value):
@@ -206,6 +207,46 @@ STMT_TYPES = {
 }
 
 
+def compile_func_arg(env, type_, value):
+    if contains_markup(type_):
+        return js.FuncExpr(None, [], list(compile_stmt(env, value)))
+    else:
+        return compile_expr(env, value)
+
+
+def compile_func_stmt(env, node, *norm_args):
+    sym = node.values[0]
+
+    arg_exprs = []
+    for arg_type, arg_value in zip(sym.__type__.__args__, norm_args):
+        if isinstance(arg_type, NamedArgMeta):
+            type_ = arg_type.__arg_type__
+            arg = compile_func_arg(env, type_, arg_value)
+        elif isinstance(arg_type, VarArgsMeta):
+            type_ = arg_type.__arg_type__
+            arg = js.Array([compile_func_arg(env, type_, v)
+                            for v in arg_value])
+        elif isinstance(arg_type, VarNamedArgsMeta):
+            type_ = arg_type.__arg_type__
+            arg = js.Object([js.Label(_str(k), compile_func_arg(env, type_, v))
+                             for k, v in arg_value.items()])
+        else:
+            arg = compile_func_arg(env, arg_type, arg_value)
+        arg_exprs.append(arg)
+
+    if sym.ns:
+        if sym.ns == '.':
+            name_expr = js.Identifier(sym.rel)
+        else:
+            name_expr = js.DotAccessor(js.Identifier(sym.ns),
+                                       js.Identifier(sym.rel))
+    else:
+        name_expr = js.DotAccessor(js.Identifier('builtins'),
+                                   js.Identifier(sym.name))
+
+    yield js.ExprStatement(js.FunctionCall(name_expr, arg_exprs))
+
+
 def compile_stmt(env, node):
     if isinstance(node, Tuple):
         sym, args = node.values[0], node.values[1:]
@@ -214,7 +255,7 @@ def compile_stmt(env, node):
         pos_args, kw_args = split_args(args)
         norm_args = normalize_args(sym.__type__, pos_args, kw_args)
 
-        proc = STMT_TYPES[sym.__type__]
+        proc = STMT_TYPES.get(sym.__type__, compile_func_stmt)
         for item in proc(env, node, *norm_args):
             yield item
 

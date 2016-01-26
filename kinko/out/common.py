@@ -28,13 +28,15 @@ class Environ(object):
                 self.vars[name] -= 1
 
 
-def returns_markup(node):
-    type_ = get_type(node)
-
+def contains_markup(type_):
     def recur_check(t):
         if isinstance(t, UnionMeta):
             return any(recur_check(st) for st in t.__types__)
         else:
             return isinstance(t, MarkupMeta)
-
     return recur_check(type_)
+
+
+def returns_markup(node):
+    type_ = get_type(node)
+    return contains_markup(type_)
