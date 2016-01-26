@@ -18,17 +18,24 @@ def bar
 
 class TestLoadCode(TestCase):
 
-    def testDependencies(self):
+    def setUp(self):
         loader = DictLoader({
             'a': A_SRC,
             'b': B_SRC,
         })
-        lookup = Lookup(loader)
+        self.lookup = Lookup(loader)
+
+    def testDependencies(self):
         self.assertEqual(
-            lookup.get('a').dependencies,
+            self.lookup.get('a').dependencies,
             {'b'},
         )
         self.assertEqual(
-            lookup.get('b').dependencies,
+            self.lookup.get('b').dependencies,
             set([]),
         )
+
+    def testLoadDependencies(self):
+        self.assertFalse(self.lookup.namespaces)
+        self.lookup.get('a')
+        self.assertEqual(set(self.lookup.namespaces.keys()), {'a', 'b'})

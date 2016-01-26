@@ -34,11 +34,16 @@ class Lookup(object):
         self.loader = loader
         self.namespaces = {}
 
+    def load(self, name):
+        src = self.loader.load(name)
+        tokens = list(tokenize(src))
+        node = parser().parse(tokens)
+        dependencies = DependenciesVisitor.get_dependencies(node)
+        self.namespaces[name] = Namespace(name, dependencies)
+        for dependency in dependencies:
+            self.load(dependency)
+
     def get(self, name):
         if name not in self.namespaces:
-            src = self.loader.load(name)
-            tokens = list(tokenize(src))
-            node = parser().parse(tokens)
-            dependencies = DependenciesVisitor.get_dependencies(node)
-            self.namespaces[name] = Namespace(name, dependencies)
+            self.load(name)
         return self.namespaces[name]
