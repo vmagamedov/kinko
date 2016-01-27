@@ -1,3 +1,5 @@
+import types
+
 from kinko.lookup import Lookup
 from kinko.loaders import DictLoader
 
@@ -37,5 +39,6 @@ class TestLoadCode(TestCase):
 
     def testLoadDependencies(self):
         self.assertFalse(self.lookup.namespaces)
-        self.lookup.get('a')
+        ns = self.lookup.get('a')
         self.assertEqual(set(self.lookup.namespaces.keys()), {'a', 'b'})
+        self.assertIsInstance(ns.module['a/foo'], types.FunctionType)
