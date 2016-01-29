@@ -1,7 +1,7 @@
 from .refs import ReferenceVisitor, RecordFieldRef
 
 
-class Attr(object):
+class Field(object):
 
     def __init__(self, name):
         self.name = name
@@ -10,13 +10,13 @@ class Attr(object):
         return ':{}'.format(self.name)
 
     def accept(self, visitor):
-        return visitor.visit_attr(self)
+        return visitor.visit_field(self)
 
 
-class Link(Attr):
+class Link(object):
 
     def __init__(self, name, edge):
-        super(Link, self).__init__(name)
+        self.name = name
         self.edge = edge
 
     def __repr__(self):
@@ -28,14 +28,14 @@ class Link(Attr):
 
 class Edge(object):
 
-    def __init__(self, attrs):
-        self.attrs = {attr.name: attr for attr in attrs}
+    def __init__(self, fields):
+        self.fields = {field.name: field for field in fields}
 
-    def add(self, attr):
-        return self.attrs.setdefault(attr.name, attr)
+    def add(self, field):
+        return self.fields.setdefault(field.name, field)
 
     def __repr__(self):
-        return '[{}]'.format(' '.join(map(repr, self.attrs.values())))
+        return '[{}]'.format(' '.join(map(repr, self.fields.values())))
 
     def accept(self, visitor):
         return visitor.visit_edge(self)
@@ -46,8 +46,8 @@ class RefPathExtractor(ReferenceVisitor):
     def __init__(self):
         self._stack = [Edge([])]
 
-    def _add_attr(self, ref):
-        self._stack[-1].add(Attr(ref.backref.name))
+    def _add_field(self, ref):
+        self._stack[-1].add(Field(ref.backref.name))
 
     def _push_stack(self, ref):
         top = self._stack[-1]
@@ -56,7 +56,7 @@ class RefPathExtractor(ReferenceVisitor):
 
     def visit_scalar(self, ref):
         super(RefPathExtractor, self).visit_scalar(ref)
-        self._add_attr(ref)
+        self._add_field(ref)
 
     def visit_list(self, ref):
         super(RefPathExtractor, self).visit_list(ref)
