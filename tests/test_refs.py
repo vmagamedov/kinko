@@ -1,9 +1,10 @@
 from kinko.refs import NamedArgRef, RefsCollector, RecordFieldRef, ListItemRef
 from kinko.refs import resolve_refs
 from kinko.nodes import Symbol
-from kinko.query import gen_query
+from kinko.query import gen_pattern
 from kinko.types import StringType, Record, IntType, Func, ListType, TypeVar
 from kinko.checker import check, Environ
+from kinko.reqs.simple import to_query
 
 from .base import TestCase, REF_EQ_PATCHER, TYPE_EQ_PATCHER, NODE_EQ_PATCHER
 from .test_parser import ParseMixin
@@ -116,5 +117,6 @@ class TestRefs(ParseMixin, TestCase):
         refs_collector = RefsCollector()
         refs_collector.visit(node)
         refs = resolve_refs(refs_collector.refs, 'foo')
-        self.assertEqual(repr(gen_query(refs)),
+        query_pattern = gen_pattern(refs)
+        self.assertEqual(repr(to_query(query_pattern)),
                          '[{:x [:count :name]} :y]')
