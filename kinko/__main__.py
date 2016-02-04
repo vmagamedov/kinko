@@ -6,6 +6,7 @@ import click
 from .parser import parser
 from .checker import check, Environ
 from .tokenizer import tokenize
+from .converter import HTMLConverter
 
 
 COMPILERS = {
@@ -74,6 +75,14 @@ def compile_(ctx, type_, source, output):
         raise
     else:
         output.write(compiler.dumps(module))
+
+
+@cli.command('convert')
+@click.argument('input', type=click.File(encoding='utf-8'))
+@click.argument('output', type=click.File(mode='w+', encoding='utf-8'),
+                default='-')
+def convert(input, output):
+    output.write(HTMLConverter.convert(input.read()))
 
 
 if __name__ == '__main__':
