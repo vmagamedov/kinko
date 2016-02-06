@@ -3,11 +3,6 @@ from collections import namedtuple
 
 import click
 
-from .parser import parser
-from .checker import check, Environ
-from .tokenizer import tokenize
-from .converter import HTMLConverter
-
 
 COMPILERS = {
     'py': 'kinko.out.py.compiler',
@@ -39,6 +34,10 @@ def cli(ctx, verbose, debug):
                 default='-')
 @click.pass_context
 def compile_(ctx, type_, source, output):
+    from .parser import parser
+    from .checker import check, Environ
+    from .tokenizer import tokenize
+
     try:
         tokens = list(tokenize(source.read()))
         node = parser().parse(tokens)
@@ -82,7 +81,9 @@ def compile_(ctx, type_, source, output):
 @click.argument('output', type=click.File(mode='w+', encoding='utf-8'),
                 default='-')
 def convert(input, output):
-    output.write(HTMLConverter.convert(input.read()))
+    from .converter import convert
+
+    output.write(convert(input.read()))
 
 
 if __name__ == '__main__':

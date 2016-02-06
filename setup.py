@@ -13,5 +13,6 @@ setup(
     extras_require={
         'js': ['slimit'],
         'cli': ['click'],
+        'html': ['lxml'],
     }
 )

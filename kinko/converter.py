@@ -1,41 +1,50 @@
 from itertools import chain
-from collections import namedtuple
-try:
-    from html.parser import HTMLParser
-except ImportError:
-    from HTMLParser import HTMLParser
+
+from lxml import etree
+from lxml.html import fromstring, fragment_fromstring, HtmlElement
 
 from .nodes import Tuple, Symbol, Keyword, String, List
+from .compat import text_type
 from .printer import Printer
 
 
-Tag = namedtuple('Tag', 'name attrs body')
+def _filter(nodes):
+    for node in nodes:
+        print(node)
+        if isinstance(node, HtmlElement):
+            yield node
+        elif isinstance(node, text_type):
+            value = node.strip()
+            if value:
+                yield value
+        else:
+            print(node)
 
 
-class HTMLConverter(HTMLParser):
+def _convert(el):
+    if isinstance(el, text_type):
+        content = el.strip()
+        if content:
+            return String(el)
 
-    def __init__(self):
-        super(HTMLConverter, self).__init__()
-        self._stack = [Tag(None, None, [])]
+    t_args = [Symbol(el.tag)]
+    t_args.extend(chain.from_iterable((Keyword(name), String(value))
+                                      for name, value in el.attrib.items()))
 
-    @classmethod
-    def convert(cls, source):
-        converter = cls()
-        converter.feed(source)
-        return Printer.dumps(List(converter._stack[0].body))
+    children = list(_filter(el.xpath("child::node()")))
 
-    def handle_starttag(self, tag_name, attrs):
-        self._stack.append(Tag(tag_name, attrs, []))
+    if len(children) == 1:
+        t_args.append(_convert(children[0]))
+    elif len(children) > 1:
+        t_args.append(Tuple([Symbol('join'),
+                             List([_convert(i) for i in children])]))
+    return Tuple(t_args)
 
-    def handle_endtag(self, tag_name):
-        tag = self._stack.pop()
 
-        t_args = [Symbol(tag.name)]
-        t_args.extend(chain.from_iterable((Keyword(name), String(value))
-                                          for name, value in tag.attrs))
-        if len(tag.body) == 1:
-            t_args.append(tag.body[0])
-        elif len(tag.body) > 1:
-            t_args.append(Tuple([Symbol('join'), List(tag.body)]))
-
-        self._stack[-1].body.append(Tuple(t_args))
+def convert(source):
+    try:
+        tree = fragment_fromstring(source)
+    except etree.ParserError:
+        tree = fromstring(source)
+    node = _convert(tree)
+    return Printer.dumps(node)
