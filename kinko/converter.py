@@ -10,15 +10,12 @@ from .printer import Printer
 
 def _filter(nodes):
     for node in nodes:
-        print(node)
         if isinstance(node, HtmlElement):
             yield node
         elif isinstance(node, text_type):
             value = node.strip()
             if value:
                 yield value
-        else:
-            print(node)
 
 
 def _convert(el):
