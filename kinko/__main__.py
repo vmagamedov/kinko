@@ -1,7 +1,25 @@
+import io
 import importlib
+import subprocess
 from collections import namedtuple
 
 import click
+
+
+def _get_osx_clipboard():
+    p = subprocess.Popen(['pbpaste', '-Prefer', 'ascii'],
+                         stdout=subprocess.PIPE)
+    content, _ = p.communicate()
+    return content.decode('utf-8')
+
+
+class InputFile(click.File):
+
+    def convert(self, value, param, ctx):
+        if value == '@':
+            content = _get_osx_clipboard()
+            return io.StringIO(content)
+        return super(InputFile, self).convert(value, param, ctx)
 
 
 COMPILERS = {
@@ -77,10 +95,12 @@ def compile_(ctx, type_, source, output):
 
 
 @cli.command('convert')
-@click.argument('input', type=click.File(encoding='utf-8'))
+@click.argument('input', type=InputFile(encoding='utf-8'))
 @click.argument('output', type=click.File(mode='w+', encoding='utf-8'),
                 default='-')
 def convert(input, output):
+    """To convert content from clipboard, pass `@` value as input (available
+    only on OS X)."""
     from .converter import convert
 
     output.write(convert(input.read()))
