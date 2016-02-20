@@ -38,7 +38,8 @@ ParsedSource = namedtuple('ParsedSource',
 
 class Lookup(object):
 
-    def __init__(self, loader, cache=None):
+    def __init__(self, types, loader, cache=None):
+        self.types = types
         self.loader = loader
         self.cache = cache or DictCache()
         self.namespaces = {}
@@ -72,10 +73,13 @@ class Lookup(object):
                                         for ps in parsed_sources))
         dmv = DefsMappingVisitor()
         dmv.visit(node)
-        env = Environ({key: Unchecked(value, False)
-                       for key, value in dmv.mapping.items()})
 
-        node = check(node, env)
+        env = dict(self.types)
+        env.update((key, Unchecked(value, False))
+                   for key, value in dmv.mapping.items())
+
+        environ = Environ(env)
+        node = check(node, environ)
 
         mapping = defaultdict(list)
         for tup in node.values:

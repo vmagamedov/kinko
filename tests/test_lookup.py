@@ -25,7 +25,7 @@ class TestLoadCode(TestCase):
             'a': A_SRC,
             'b': B_SRC,
         })
-        self.lookup = Lookup(loader)
+        self.lookup = Lookup({}, loader)
 
     def testDependencies(self):
         self.assertEqual(
