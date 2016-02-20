@@ -250,6 +250,18 @@ class TestCompile(ParseMixin, TestCase):
             {'foo': Record[{'bar': Record[{'baz': StringType}]}]},
         )
 
+    def testGetStmt(self):
+        self.assertCompiles(
+            """
+            def foo
+              #bar.baz
+            """,
+            """
+            def foo(bar):
+                buf.write(bar['baz'])
+            """,
+        )
+
     def testCompile(self):
         node = self.parse("""
         def foo

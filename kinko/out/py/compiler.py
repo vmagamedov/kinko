@@ -268,7 +268,7 @@ def compile_join2_stmt(env, node, sep, col):
 
 def compile_get_stmt(env, node, obj, attr):
     obj_expr = compile_expr(env, obj)
-    yield py.Subscript(obj_expr, py.Index(py.Str(attr.name)), py.Load())
+    yield _write(py.Subscript(obj_expr, py.Index(py.Str(attr.name)), py.Load()))
 
 
 STMT_TYPES = {
