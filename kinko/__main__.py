@@ -1,4 +1,6 @@
 import io
+import codecs
+import os.path
 import importlib
 import subprocess
 from collections import namedtuple
@@ -99,11 +101,44 @@ def compile_(ctx, type_, source, output):
 @click.argument('output', type=click.File(mode='w+', encoding='utf-8'),
                 default='-')
 def convert(input, output):
-    """To convert content from clipboard, pass `@` value as input (available
+    """Convert HTML into Kinko source.
+
+    To convert content from clipboard, pass `@` value as input (available
     only on OS X)."""
     from .converter import convert
 
     output.write(convert(input.read()))
+
+
+@cli.command('render')
+@click.argument('path', type=click.Path(exists=True, file_okay=False))
+@click.argument('name')
+@click.argument('types', type=click.File(encoding='utf-8'))
+@click.argument('result', type=click.File(encoding='utf-8'))
+@click.argument('output', type=click.File(mode='w+', encoding='utf-8'),
+                default='-')
+def render(path, name, types, result, output):
+    """Render Kinko source into HTML."""
+    from .lookup import Lookup
+    from .loaders import DictLoader
+    from .typedef import load_types
+
+    files = os.listdir(path)
+    source_files = [f for f in files if f.endswith('.kinko')]
+    source_names = [f[:-len('.kinko')] for f in source_files]
+
+    sources = {}
+    for file_name, source_name in zip(source_files, source_names):
+        with codecs.open(os.path.join(path, file_name), encoding='utf-8') as f:
+            sources[source_name] = f.read()
+
+    types_ = load_types(types.read())
+
+    loader = DictLoader(sources)
+    lookup = Lookup(types_, loader)
+
+    ns, _, _ = name.partition('/')
+    print(lookup.get(ns).module[name])
 
 
 if __name__ == '__main__':
