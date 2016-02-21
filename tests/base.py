@@ -1,8 +1,9 @@
 import unittest
-
 try:
+    from itertools import zip_longest
     from unittest.mock import patch, Mock as _Mock
 except ImportError:
+    from itertools import izip_longest as zip_longest
     from mock import patch, Mock as _Mock
 
 try:
@@ -76,6 +77,38 @@ def _ref_eq(self, other):
 
 
 REF_EQ_PATCHER = patch.multiple(Reference, __eq__=_ref_eq, __ne__=_ne)
+
+
+def result_match(result, value, path=None):
+    path = [] if path is None else path
+    if isinstance(value, dict):
+        for k, v in value.items():
+            ok, sp, sv = result_match(result[k], v, path + [k])
+            if not ok:
+                return ok, sp, sv
+    elif isinstance(value, (list, tuple)):
+        pairs = zip_longest(result, value)
+        for i, (v1, v2) in enumerate(pairs):
+            ok, sp, sv = result_match(v1, v2, path + [i])
+            if not ok:
+                return ok, sp, sv
+    elif result != value:
+        return False, path, value
+
+    return True, None, None
+
+
+class ResultMixin(object):
+
+    def assertResult(self, result, value):
+        print(result)
+        ok, path, subval = result_match(result, value)
+        if not ok:
+            path_str = 'result' + ''.join('[{!r}]'.format(v) for v in path)
+            msg = ('Result mismatch, first different element '
+                   'path: {}, value: {!r}'
+                   .format(path_str, subval))
+            raise self.failureException(msg)
 
 
 class TestCase(unittest.TestCase):
