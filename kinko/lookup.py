@@ -2,6 +2,7 @@ from itertools import chain
 from collections import namedtuple, defaultdict
 
 from .nodes import NodeVisitor, List
+from .utils import Buffer
 from .parser import parser
 from .compat import _exec_in
 from .checker import NamesResolver, DefsMappingVisitor
@@ -117,3 +118,11 @@ class Lookup(object):
     def get(self, name):
         self.load(name)
         return self.namespaces[name]
+
+    def render(self, name, ctx):
+        ns, _, _ = name.partition('/')
+        fn = self.get(ns).module[name]
+        buf = Buffer()
+        buf.push()
+        fn(buf, ctx)
+        return buf.pop()
