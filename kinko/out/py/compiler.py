@@ -207,12 +207,14 @@ def compile_expr(env, node):
 
 
 def compile_def_stmt(env, node, name_sym, body):
-    args = [a.__arg_name__ for a in get_type(node).__args__]
-    with env.push(args):
-        py_args = [py.arg(env[arg]) for arg in args]
-        yield py.FunctionDef(name_sym.name,
-                             py.arguments(py_args, None, None, []),
-                             list(compile_stmts(env, body)), [])
+    arg_names = [a.__arg_name__ for a in get_type(node).__args__]
+    with env.push(['buf', 'ctx']):
+        py_args = [py.arg('buf'), py.arg('ctx')]
+        with env.push(arg_names):
+            py_args.extend(py.arg(env[arg]) for arg in arg_names)
+            yield py.FunctionDef(name_sym.name,
+                                 py.arguments(py_args, None, None, []),
+                                 list(compile_stmts(env, body)), [])
 
 
 def compile_html_tag_stmt(env, node, attrs, body):
@@ -328,6 +330,9 @@ def compile_func_stmt(env, node, *norm_args):
             pos_arg_exprs.append(_buf_pop())
         else:
             pos_arg_exprs.append(compile_expr(env, value))
+
+    pos_arg_exprs.extend([py.Name('ctx', py.Load()),
+                          py.Name('buf', py.Load())])
 
     # applying args in reversed order to preserve pushes/pops
     # consistency

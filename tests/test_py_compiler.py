@@ -130,7 +130,7 @@ class TestCompile(ParseMixin, TestCase):
                   #baz
             """,
             """
-            def func(foo, bar, baz):
+            def func(buf, ctx, foo, bar, baz):
                 buf.write('<div class="')
                 buf.write(foo)
                 buf.write('">')
@@ -161,9 +161,9 @@ class TestCompile(ParseMixin, TestCase):
             buf.write('<div>')
             buf.push()
             buf.write('<span>Test</span>')
-            baz(3, 4, param2=buf.pop())
+            baz(buf, ctx, 3, 4, param2=buf.pop())
             buf.write('</div>')
-            foo.bar(1, 2, param1=buf.pop())
+            foo.bar(buf, ctx, 1, 2, param1=buf.pop())
             buf.write('</div>')
             """,
             {'foo/bar': Func[[IntType, IntType, NamedArg['param1', Markup]],
@@ -257,7 +257,7 @@ class TestCompile(ParseMixin, TestCase):
               #bar.baz
             """,
             """
-            def foo(bar):
+            def foo(buf, ctx, bar):
                 buf.write(bar['baz'])
             """,
         )
@@ -279,9 +279,9 @@ class TestCompile(ParseMixin, TestCase):
 
         buf = Buffer()
         buf.push()
-        ns = {'buf': buf, 'ctx': ctx}
+        ns = {}
         _exec_in(mod_code, ns)
-        ns['foo']()
+        ns['foo'](buf, ctx)
         content = buf.pop()
 
         self.assertEqual(
