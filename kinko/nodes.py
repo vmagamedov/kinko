@@ -3,10 +3,26 @@ from json.encoder import encode_basestring_ascii
 from .compat import text_type
 
 
-class Node(object):
+_undefined = object()
 
-    def __init__(self, location=None):  # kwarg-only
-        self.location = location
+
+class Node(object):
+    location = None
+
+    def __init__(self, location=_undefined):
+        if location is not _undefined:
+            self.location = location
+
+    def clone(self):
+        cls = self.__class__
+        clone = cls.__new__(cls)
+        clone.__dict__ = self.__dict__.copy()
+        return clone
+
+    def clone_with(self, *args, **kwargs):
+        clone = self.clone()
+        clone.__init__(*args, **kwargs)
+        return clone
 
     @classmethod
     def typed(cls, _type_, *args, **kwargs):
@@ -166,25 +182,25 @@ class NodeTransformer(object):
         return node.accept(self)
 
     def visit_tuple(self, node):
-        return Tuple([self.visit(i) for i in node.values])
+        return node.clone_with(self.visit(i) for i in node.values)
 
     def visit_list(self, node):
-        return List([self.visit(i) for i in node.values])
+        return node.clone_with(self.visit(i) for i in node.values)
 
     def visit_dict(self, node):
-        return Dict([self.visit(i) for i in node.values])
+        return node.clone_with(self.visit(i) for i in node.values)
 
     def visit_symbol(self, node):
-        return Symbol(node.name)
+        return node.clone()
 
     def visit_keyword(self, node):
-        return Keyword(node.name)
+        return node.clone()
 
     def visit_placeholder(self, node):
-        return Placeholder(node.name)
+        return node.clone()
 
     def visit_number(self, node):
-        return Number(node.value)
+        return node.clone()
 
     def visit_string(self, node):
-        return String(node.value)
+        return node.clone()

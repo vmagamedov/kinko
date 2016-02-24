@@ -122,6 +122,7 @@ def render(path, name, types, result, output):
     from .lookup import Lookup
     from .loaders import DictLoader
     from .typedef import load_types
+    from .readers.simple import loads
 
     files = os.listdir(path)
     source_files = [f for f in files if f.endswith('.kinko')]
@@ -137,8 +138,8 @@ def render(path, name, types, result, output):
     loader = DictLoader(sources)
     lookup = Lookup(types_, loader)
 
-    ns, _, _ = name.partition('/')
-    print(lookup.get(ns).module[name])
+    result_ = loads(result.read())
+    output.write(lookup.render(name, result_))
 
 
 if __name__ == '__main__':

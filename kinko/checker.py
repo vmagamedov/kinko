@@ -1,6 +1,6 @@
 from itertools import chain
 from contextlib import contextmanager
-from collections import namedtuple, deque
+from collections import namedtuple, deque, defaultdict
 
 from .refs import PosArgRef, NamedArgRef, RecordFieldRef, ListItemRef
 from .nodes import Tuple, Number, Keyword, String, List, Symbol, Placeholder
@@ -76,6 +76,25 @@ class NamesResolver(NodeTransformer):
             return super(NamesResolver, self).visit_tuple(node)
 
 
+class NamesUnResolver(NodeTransformer):
+
+    def __init__(self, ns):
+        self.ns = ns
+
+    def visit_symbol(self, node):
+        if node.ns == self.ns:
+            return node.clone_with('./{}'.format(node.rel))
+        return node.clone()
+
+    def visit_tuple(self, node):
+        if node.values[0].name == 'def':
+            (def_sym, name_sym), body = node.values[:2], node.values[2:]
+            name_sym = name_sym.clone_with(name_sym.rel)
+            return node.clone_with([self.visit(def_sym), name_sym] +
+                                   [self.visit(i) for i in body])
+        return super(NamesUnResolver, self).visit_tuple(node)
+
+
 class DefsMappingVisitor(NodeVisitor):
 
     def __init__(self):
@@ -85,6 +104,26 @@ class DefsMappingVisitor(NodeVisitor):
         if node.values[0].name == 'def':
             self.mapping[node.values[1].name] = node
         super(DefsMappingVisitor, self).visit_tuple(node)
+
+
+def find_unchecked_defs(node):
+    visitor = DefsMappingVisitor()
+    visitor.visit(node)
+    return {def_name: Unchecked(value, False)
+            for def_name, value in visitor.mapping.items()}
+
+
+def collect_modules(nodes):
+    return List(chain.from_iterable(node.values for node in nodes))
+
+
+def split_modules(node):
+    mapping = defaultdict(list)
+    for defn in node.values:
+        name_sym = defn.values[1]
+        mapping[name_sym.ns].append(defn)
+    return {ns: List(body)
+            for ns, body in mapping.items()}
 
 
 class _PlaceholdersExtractor(NodeVisitor):

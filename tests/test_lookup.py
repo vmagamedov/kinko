@@ -41,4 +41,4 @@ class TestLoadCode(TestCase):
         self.assertFalse(self.lookup.namespaces)
         ns = self.lookup.get('a')
         self.assertEqual(set(self.lookup.namespaces.keys()), {'a', 'b'})
-        self.assertIsInstance(ns.module['a/foo'], types.FunctionType)
+        self.assertIsInstance(ns.module['foo'], types.FunctionType)

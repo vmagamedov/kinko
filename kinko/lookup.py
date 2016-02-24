@@ -1,11 +1,12 @@
 from itertools import chain
-from collections import namedtuple, defaultdict
+from collections import namedtuple
 
 from .nodes import NodeVisitor, List
 from .utils import Buffer
 from .parser import parser
 from .compat import _exec_in
-from .checker import NamesResolver, DefsMappingVisitor
+from .checker import DefsMappingVisitor, split_modules
+from .checker import NamesResolver, NamesUnResolver
 from .checker import Environ, Unchecked, check
 from .loaders import DictCache
 from .tokenizer import tokenize
@@ -35,6 +36,24 @@ Namespace = namedtuple('Namespace',
 
 ParsedSource = namedtuple('ParsedSource',
                           'name modified_time node dependencies')
+
+
+class SimpleContext(object):
+
+    def __init__(self, result):
+        self.buffer = Buffer()
+        self.result = result
+
+
+class Context(SimpleContext):
+
+    def __init__(self, lookup, result):
+        self._lookup = lookup
+        super(Context, self).__init__(result)
+
+    def lookup(self, name):
+        ns, _, fn_name = name.partition('/')
+        return self._lookup.get(ns).module[fn_name]
 
 
 class Lookup(object):
@@ -82,12 +101,10 @@ class Lookup(object):
         environ = Environ(env)
         node = check(node, environ)
 
-        mapping = defaultdict(list)
-        for tup in node.values:
-            def_name = tup.values[1]
-            mapping[def_name.ns].append(tup)
+        modules = {ns: NamesUnResolver(ns).visit(mod)
+                   for ns, mod in split_modules(node).items()}
 
-        return [ps._replace(node=List(mapping[ps.name]))
+        return [ps._replace(node=modules[ps.name])
                 for ps in parsed_sources]
 
     def _compile_module(self, name, module):
@@ -119,10 +136,9 @@ class Lookup(object):
         self.load(name)
         return self.namespaces[name]
 
-    def render(self, name, ctx):
-        ns, _, _ = name.partition('/')
-        fn = self.get(ns).module[name]
-        buf = Buffer()
-        buf.push()
-        fn(buf, ctx)
-        return buf.pop()
+    def render(self, name, result):
+        ctx = Context(self, result)
+        ctx.buffer.push()
+        fn = ctx.lookup(name)
+        fn(ctx)
+        return ctx.buffer.pop()

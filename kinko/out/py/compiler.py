@@ -1,4 +1,4 @@
-from __future__ import absolute_import
+from __future__ import absolute_import, unicode_literals
 
 from ast import NodeTransformer, iter_fields, copy_location
 from ast import fix_missing_locations
@@ -20,36 +20,29 @@ from . import ast as py
 
 
 def _write(value):
-    return py.Expr(py.Call(
-        py.Attribute(py.Name('buf', py.Load()), 'write', py.Load()),
-        [value], [], None, None,
-    ))
+    buffer = py.Attribute(py.Name('ctx', py.Load()), 'buffer', py.Load())
+    return py.Expr(py.Call(py.Attribute(buffer, 'write', py.Load()),
+                           [value], [], None, None))
 
 
 def _write_str(value):
     return _write(py.Str(value))
 
 
-def _ctx_load(name):
-    return py.Subscript(py.Name('ctx', py.Load()),
-                        py.Index(py.Str(name)), py.Load())
-
-
-def _ctx_store(name):
-    return py.Subscript(py.Name('ctx', py.Load()),
-                        py.Index(py.Str(name)), py.Store())
+def _result_get(name):
+    result = py.Attribute(py.Name('ctx', py.Load()), 'result', py.Load())
+    return py.Subscript(result, py.Index(py.Str(name)), py.Load())
 
 
 def _buf_push():
-    return py.Expr(py.Call(
-        py.Attribute(py.Name('buf', py.Load()), 'push', py.Load()),
-        [], [], None, None,
-    ))
+    buffer = py.Attribute(py.Name('ctx', py.Load()), 'buffer', py.Load())
+    return py.Expr(py.Call(py.Attribute(buffer, 'push', py.Load()),
+                           [], [], None, None))
 
 
 def _buf_pop():
-    return py.Call(py.Attribute(py.Name('buf', py.Load()),
-                                'pop', py.Load()),
+    buffer = py.Attribute(py.Name('ctx', py.Load()), 'buffer', py.Load())
+    return py.Call(py.Attribute(buffer, 'pop', py.Load()),
                    [], [], None, None)
 
 
@@ -87,33 +80,43 @@ def _node_copy(func):
     return wrapper
 
 
+def _maybe_write(node):
+    if not _cls_eq(node, 'Expr') or not _cls_eq(node.value, 'Call'):
+        return
+    callable_ = node.value.func
+
+    if not _cls_eq(callable_, 'Attribute') or not callable_.attr == 'write':
+        return
+    has_write = callable_.value
+
+    if not _cls_eq(has_write, 'Attribute') or not has_write.attr == 'buffer':
+        return
+    has_buffer = has_write.value
+
+    if not _cls_eq(has_buffer, 'Name') or not has_buffer.id == 'ctx':
+        return
+    if len(node.value.args) == 1:
+        if _cls_eq(node.value.args[0], 'Str'):
+            return node.value.args[0].s
+        elif _cls_eq(node.value.args[0], 'Num'):
+            return text_type(node.value.args[0].n)
+
+
 class _Optimizer(NodeTransformer):
 
     def _paste(self, body):
         chunks = []
         for item in body:
-            if (
-                _cls_eq(item, 'Expr') and
-                _cls_eq(item.value, 'Call') and
-                _cls_eq(item.value.func, 'Attribute') and
-                _cls_eq(item.value.func.value, 'Name') and
-                item.value.func.value.id == 'buf' and
-                item.value.func.attr == 'write' and
-                len(item.value.args) == 1 and
-                (_cls_eq(item.value.args[0], 'Str') or
-                 _cls_eq(item.value.args[0], 'Num'))
-            ):
-                if _cls_eq(item.value.args[0], 'Str'):
-                    chunks.append(item.value.args[0].s)
-                else:
-                    chunks.append(text_type(item.value.args[0].n))
+            chunk = _maybe_write(item)
+            if chunk is not None:
+                chunks.append(chunk)
             else:
                 if chunks:
-                    yield _write_str(u''.join(chunks))
+                    yield _write_str(''.join(chunks))
                     del chunks[:]
                 yield item
         if chunks:
-            yield _write_str(u''.join(chunks))
+            yield _write_str(''.join(chunks))
 
     @_node_copy
     def visit_Module(self, node):
@@ -190,7 +193,7 @@ def compile_expr(env, node):
         if node.name in env:
             return py.Name(env[node.name], py.Load())
         else:
-            return _ctx_load(node.name)
+            return _result_get(node.name)
 
     elif isinstance(node, Placeholder):
         return py.Name(env[node.name], py.Load())
@@ -208,8 +211,8 @@ def compile_expr(env, node):
 
 def compile_def_stmt(env, node, name_sym, body):
     arg_names = [a.__arg_name__ for a in get_type(node).__args__]
-    with env.push(['buf', 'ctx']):
-        py_args = [py.arg('buf'), py.arg('ctx')]
+    with env.push(['ctx']):
+        py_args = [py.arg('ctx')]
         with env.push(arg_names):
             py_args.extend(py.arg(env[arg]) for arg in arg_names)
             yield py.FunctionDef(name_sym.name,
@@ -219,22 +222,22 @@ def compile_def_stmt(env, node, name_sym, body):
 
 def compile_html_tag_stmt(env, node, attrs, body):
     tag_name = node.values[0].name
-    yield _write_str(u'<{}'.format(tag_name))
+    yield _write_str('<{}'.format(tag_name))
     for key, value in attrs.items():
-        yield _write_str(u' {}="'.format(key))
+        yield _write_str(' {}="'.format(key))
         yield _write(compile_expr(env, value))
-        yield _write_str(u'"')
+        yield _write_str('"')
     if tag_name in SELF_CLOSING_ELEMENTS:
-        yield _write_str(u'/>')
+        yield _write_str('/>')
         assert not body, ('Positional args are not expected in the '
                           'self-closing elements')
         return
     else:
-        yield _write_str(u'>')
+        yield _write_str('>')
     for arg in body:
         for item in _yield_writes(env, arg):
             yield item
-    yield _write_str(u'</{}>'.format(tag_name))
+    yield _write_str('</{}>'.format(tag_name))
 
 
 def compile_if1_stmt(env, node, test, then_):
@@ -304,7 +307,9 @@ def compile_func_stmt(env, node, *norm_args):
         if sym.ns == '.':
             name_expr = py.Name(sym.rel, py.Load())
         else:
-            name_expr = py.Name('.'.join([sym.ns, sym.rel]), py.Load())
+            name_expr = py.Call(py.Attribute(py.Name('ctx', py.Load()),
+                                             'lookup', py.Load()),
+                                [py.Str(sym.name)], [], None, None)
     else:
         name_expr = py.Attribute(py.Name('builtins', py.Load()),
                                  sym.name, py.Load())
@@ -331,8 +336,7 @@ def compile_func_stmt(env, node, *norm_args):
         else:
             pos_arg_exprs.append(compile_expr(env, value))
 
-    pos_arg_exprs.extend([py.Name('ctx', py.Load()),
-                          py.Name('buf', py.Load())])
+    pos_arg_exprs.extend([py.Name('ctx', py.Load())])
 
     # applying args in reversed order to preserve pushes/pops
     # consistency
@@ -359,7 +363,7 @@ def compile_stmt(env, node):
         if node.name in env:
             yield _write(py.Name(env[node.name], py.Load()))
         else:
-            yield _write(_ctx_load(node.name))
+            yield _write(_result_get(node.name))
 
     elif isinstance(node, Placeholder):
         yield _write(py.Name(env[node.name], py.Load()))

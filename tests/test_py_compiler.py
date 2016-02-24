@@ -4,11 +4,12 @@ from __future__ import unicode_literals
 import difflib
 from textwrap import dedent
 
-from kinko.utils import Buffer
 from kinko.types import StringType, ListType, VarNamedArgs, Func, Record
 from kinko.types import IntType, Union, Markup, NamedArg
 from kinko.compat import _exec_in, PY3
-from kinko.checker import check, Environ
+from kinko.lookup import SimpleContext
+from kinko.checker import check, Environ, NamesResolver, find_unchecked_defs
+from kinko.checker import NamesUnResolver, collect_modules, split_modules
 from kinko.out.py.compiler import compile_module, dumps
 
 from .base import TestCase
@@ -17,24 +18,28 @@ from .test_parser import ParseMixin
 
 class TestCompile(ParseMixin, TestCase):
 
-    def assertCompiles(self, src, code, env=None):
-        node = self.parse(src)
-        node = check(node, Environ(env or {}))
-        mod = compile_module(node)
-        first = dumps(mod).strip()
+    def compareSources(self, first, second):
+        first = first.strip()
         if not PY3:
             first = first.replace("u'", "'")
-        try:
-            compile(mod, '<kinko-template>', 'exec')
-        except TypeError:
-            print(first)
-            raise
-        second = dedent(code).strip()
+        second = dedent(second).strip()
         if first != second:
             msg = ('Compiled code is not equal:\n\n{}'
                    .format('\n'.join(difflib.ndiff(first.splitlines(),
                                                    second.splitlines()))))
             raise self.failureException(msg)
+
+    def assertCompiles(self, src, code, env=None):
+        node = self.parse(src)
+        node = check(node, Environ(env or {}))
+        mod = compile_module(node)
+        try:
+            compile(mod, '<kinko-template>', 'exec')
+        except TypeError:
+            print(dumps(mod))
+            raise
+        else:
+            self.compareSources(dumps(mod), code)
 
     def testTag(self):
         self.assertCompiles(
@@ -42,7 +47,7 @@ class TestCompile(ParseMixin, TestCase):
             div :foo "bar" "baz"
             """,
             """
-            buf.write('<div foo="bar">baz</div>')
+            ctx.buffer.write('<div foo="bar">baz</div>')
             """,
         )
 
@@ -52,9 +57,9 @@ class TestCompile(ParseMixin, TestCase):
             div :foo "bar" baz
             """,
             """
-            buf.write('<div foo="bar">')
-            buf.write(ctx['baz'])
-            buf.write('</div>')
+            ctx.buffer.write('<div foo="bar">')
+            ctx.buffer.write(ctx.result['baz'])
+            ctx.buffer.write('</div>')
             """,
             {'baz': StringType},
         )
@@ -67,7 +72,7 @@ class TestCompile(ParseMixin, TestCase):
               div "two"
             """,
             """
-            buf.write('<div><div>one</div><div>two</div></div>')
+            ctx.buffer.write('<div><div>one</div><div>two</div></div>')
             """,
         )
         # self.assertCompiles(
@@ -75,7 +80,7 @@ class TestCompile(ParseMixin, TestCase):
         #     div :class (join [1 2 3])
         #     """,
         #     """
-        #     buf.write('<div class="123"></div>')
+        #     ctx.buffer.write('<div class="123"></div>')
         #     """,
         # )
         # self.assertCompiles(
@@ -83,7 +88,7 @@ class TestCompile(ParseMixin, TestCase):
         #     div :class (join " " [1 2 3])
         #     """,
         #     """
-        #     buf.write('<div class="1 2 3"></div>')
+        #     ctx.buffer.write('<div class="1 2 3"></div>')
         #     """,
         # )
 
@@ -95,12 +100,12 @@ class TestCompile(ParseMixin, TestCase):
                 div i
             """,
             """
-            buf.write('<div>')
-            for i in ctx['items']:
-                buf.write('<div>')
-                buf.write(i)
-                buf.write('</div>')
-            buf.write('</div>')
+            ctx.buffer.write('<div>')
+            for i in ctx.result['items']:
+                ctx.buffer.write('<div>')
+                ctx.buffer.write(i)
+                ctx.buffer.write('</div>')
+            ctx.buffer.write('</div>')
             """,
             {'items': ListType[StringType]},
         )
@@ -111,9 +116,9 @@ class TestCompile(ParseMixin, TestCase):
             a :href (url-for "foo" :bar "baz")
             """,
             """
-            buf.write('<a href="')
-            buf.write(builtins.url-for('foo', bar='baz'))
-            buf.write('"></a>')
+            ctx.buffer.write('<a href="')
+            ctx.buffer.write(builtins.url-for('foo', bar='baz'))
+            ctx.buffer.write('"></a>')
             """,
             {'url-for': Func[[StringType, VarNamedArgs[StringType]],
                              StringType]},
@@ -130,16 +135,16 @@ class TestCompile(ParseMixin, TestCase):
                   #baz
             """,
             """
-            def func(buf, ctx, foo, bar, baz):
-                buf.write('<div class="')
-                buf.write(foo)
-                buf.write('">')
-                buf.write(bar)
-                buf.write('</div>')
-                for i in ctx['items']:
-                    buf.write('<div>')
-                    buf.write(baz)
-                    buf.write('</div>')
+            def func(ctx, foo, bar, baz):
+                ctx.buffer.write('<div class="')
+                ctx.buffer.write(foo)
+                ctx.buffer.write('">')
+                ctx.buffer.write(bar)
+                ctx.buffer.write('</div>')
+                for i in ctx.result['items']:
+                    ctx.buffer.write('<div>')
+                    ctx.buffer.write(baz)
+                    ctx.buffer.write('</div>')
             """,
             {'items': ListType[Record[{}]]},
         )
@@ -156,15 +161,15 @@ class TestCompile(ParseMixin, TestCase):
                         span "Test"
             """,
             """
-            buf.write('<div>')
-            buf.push()
-            buf.write('<div>')
-            buf.push()
-            buf.write('<span>Test</span>')
-            baz(buf, ctx, 3, 4, param2=buf.pop())
-            buf.write('</div>')
-            foo.bar(buf, ctx, 1, 2, param1=buf.pop())
-            buf.write('</div>')
+            ctx.buffer.write('<div>')
+            ctx.buffer.push()
+            ctx.buffer.write('<div>')
+            ctx.buffer.push()
+            ctx.buffer.write('<span>Test</span>')
+            baz(ctx, 3, 4, param2=ctx.buffer.pop())
+            ctx.buffer.write('</div>')
+            ctx.lookup('foo/bar')(ctx, 1, 2, param1=ctx.buffer.pop())
+            ctx.buffer.write('</div>')
             """,
             {'foo/bar': Func[[IntType, IntType, NamedArg['param1', Markup]],
                              Markup],
@@ -184,9 +189,9 @@ class TestCompile(ParseMixin, TestCase):
         #     """,
         #     """
         #     if 1:
-        #         buf.write('<div>Trueish</div>')
+        #         ctx.buffer.write('<div>Trueish</div>')
         #     else:
-        #         buf.write('<div>Falseish</div>')
+        #         ctx.buffer.write('<div>Falseish</div>')
         #     """,
         # )
         # self.assertCompiles(
@@ -197,7 +202,7 @@ class TestCompile(ParseMixin, TestCase):
         #     """,
         #     """
         #     if 1:
-        #         buf.write('<div>Trueish</div>')
+        #         ctx.buffer.write('<div>Trueish</div>')
         #     """,
         # )
         self.assertCompiles(
@@ -207,7 +212,7 @@ class TestCompile(ParseMixin, TestCase):
             """,
             """
             if 1:
-                buf.write('<div>Trueish</div>')
+                ctx.buffer.write('<div>Trueish</div>')
             """,
         )
         self.assertCompiles(
@@ -217,10 +222,10 @@ class TestCompile(ParseMixin, TestCase):
                 span "Trueish"
             """,
             """
-            buf.write('<div>')
+            ctx.buffer.write('<div>')
             if ('true' if 1 else 'false'):
-                buf.write('<span>Trueish</span>')
-            buf.write('</div>')
+                ctx.buffer.write('<span>Trueish</span>')
+            ctx.buffer.write('</div>')
             """,
         )
         self.assertCompiles(
@@ -230,10 +235,10 @@ class TestCompile(ParseMixin, TestCase):
                 span "Trueish"
             """,
             """
-            buf.write('<div>')
+            ctx.buffer.write('<div>')
             if ('true' if 1 else None):
-                buf.write('<span>Trueish</span>')
-            buf.write('</div>')
+                ctx.buffer.write('<span>Trueish</span>')
+            ctx.buffer.write('</div>')
             """,
         )
 
@@ -243,9 +248,9 @@ class TestCompile(ParseMixin, TestCase):
             div :class foo.bar.baz
             """,
             """
-            buf.write('<div class="')
-            buf.write(ctx['foo']['bar']['baz'])
-            buf.write('"></div>')
+            ctx.buffer.write('<div class="')
+            ctx.buffer.write(ctx.result['foo']['bar']['baz'])
+            ctx.buffer.write('"></div>')
             """,
             {'foo': Record[{'bar': Record[{'baz': StringType}]}]},
         )
@@ -257,8 +262,63 @@ class TestCompile(ParseMixin, TestCase):
               #bar.baz
             """,
             """
-            def foo(buf, ctx, bar):
-                buf.write(bar['baz'])
+            def foo(ctx, bar):
+                ctx.buffer.write(bar['baz'])
+            """,
+        )
+
+    def testModule(self):
+        foo_node = self.parse("""
+        def func1
+          div
+            ./func2
+
+        def func2
+          div
+            bar/func3
+        """)
+        bar_node = self.parse("""
+        def func3
+          div "Text"
+        """)
+        foo_node = NamesResolver('foo').visit(foo_node)
+        bar_node = NamesResolver('bar').visit(bar_node)
+
+        node = collect_modules([foo_node, bar_node])
+        env = Environ(find_unchecked_defs(node))
+        node = check(node, env)
+
+        modules = split_modules(node)
+
+        foo_node = modules['foo']
+        bar_node = modules['bar']
+
+        foo_node = NamesUnResolver('foo').visit(foo_node)
+        bar_node = NamesUnResolver('bar').visit(bar_node)
+
+        foo_module = compile_module(foo_node)
+        _exec_in(compile(foo_module, '<kinko:foo>', 'exec'), {})
+        self.compareSources(
+            dumps(foo_module),
+            """
+            def func1(ctx):
+                ctx.buffer.write('<div>')
+                func2(ctx)
+                ctx.buffer.write('</div>')
+
+            def func2(ctx):
+                ctx.buffer.write('<div>')
+                ctx.lookup('bar/func3')(ctx)
+                ctx.buffer.write('</div>')
+            """,
+        )
+        bar_module = compile_module(bar_node)
+        _exec_in(compile(bar_module, '<kinko:bar>', 'exec'), {})
+        self.compareSources(
+            dumps(bar_module),
+            """
+            def func3(ctx):
+                ctx.buffer.write('<div>Text</div>')
             """,
         )
 
@@ -275,14 +335,12 @@ class TestCompile(ParseMixin, TestCase):
         mod = compile_module(node)
         mod_code = compile(mod, '<kinko-template>', 'exec')
 
-        ctx = {'items': [1, 2, "Привет"]}
-
-        buf = Buffer()
-        buf.push()
+        ctx = SimpleContext({'items': [1, 2, "Привет"]})
+        ctx.buffer.push()
         ns = {}
         _exec_in(mod_code, ns)
-        ns['foo'](buf, ctx)
-        content = buf.pop()
+        ns['foo'](ctx)
+        content = ctx.buffer.pop()
 
         self.assertEqual(
             content,
