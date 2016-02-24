@@ -3,8 +3,8 @@ from kinko.nodes import Tuple, Symbol, Number, Keyword, List, Placeholder
 from kinko.nodes import String
 from kinko.types import Func, IntType, StringType, NamedArg, TypeVar, Markup
 from kinko.types import Record, ListType, Union, DictType, Option
-from kinko.types import VarArgs, VarNamedArgs, BoolType
-from kinko.checker import Environ, check, KinkoTypeError, EACH_TYPE
+from kinko.types import VarArgs, VarNamedArgs, BoolType, RecordMeta
+from kinko.checker import Environ, check, KinkoTypeError, EACH_TYPE, _FreshVars
 from kinko.checker import LET_TYPE, DEF_TYPE, GET_TYPE, IF2_TYPE, IF_SOME1_TYPE
 from kinko.checker import unify, NamesResolver, DefsMappingVisitor, Unchecked
 from kinko.checker import match_fn, restore_args, HTML_TAG_TYPE
@@ -68,6 +68,20 @@ class TestChecker(ParseMixin, TestCase):
             (Func[[IntType, VarNamedArgs[IntType]], IntType],
              [1, {'foo': 2, 'bar': 3}])
         )
+
+    def testFreshVars(self):
+        v1, v2 = TypeVar[None], TypeVar[None]
+        t = TypeVar[Record[{'foo': v1, 'bar': v2, 'baz': v1}]]
+        fresh_t = _FreshVars().visit(t)
+        self.assertIsInstance(fresh_t, RecordMeta)
+        self.assertEqual(fresh_t.__items__['foo'], TypeVar[None])
+        self.assertEqual(fresh_t.__items__['bar'], TypeVar[None])
+        self.assertEqual(fresh_t.__items__['baz'], TypeVar[None])
+        self.assertIsNot(fresh_t.__items__['foo'], fresh_t.__items__['bar'])
+        self.assertIs(fresh_t.__items__['foo'], fresh_t.__items__['baz'])
+        self.assertIsNot(fresh_t.__items__['foo'], v1)
+        self.assertIsNot(fresh_t.__items__['bar'], v2)
+        self.assertIsNot(fresh_t.__items__['baz'], v1)
 
     def testRestoreArgs(self):
         self.assertEqual(

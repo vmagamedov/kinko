@@ -143,9 +143,11 @@ class _FreshVars(TypeTransformer):
         self._mapping = {}
 
     def visit_typevar(self, type_):
-        if type_ not in self._mapping:
-            self._mapping[type_] = TypeVar[None]
-        return self._mapping[type_]
+        if type_.__instance__ is None:
+            if type_ not in self._mapping:
+                self._mapping[type_] = TypeVar[None]
+            return self._mapping[type_]
+        return self.visit(type_.__instance__)
 
 
 def get_type(node):
