@@ -6,7 +6,7 @@ from kinko.types import Record, ListType, Union, DictType, Option
 from kinko.types import VarArgs, VarNamedArgs, BoolType, RecordMeta
 from kinko.checker import Environ, check, KinkoTypeError, EACH_TYPE, _FreshVars
 from kinko.checker import LET_TYPE, DEF_TYPE, GET_TYPE, IF2_TYPE, IF_SOME1_TYPE
-from kinko.checker import unify, NamesResolver, DefsMappingVisitor, Unchecked
+from kinko.checker import unify, NamesResolver, def_types
 from kinko.checker import match_fn, restore_args, HTML_TAG_TYPE
 
 from .base import TestCase, NODE_EQ_PATCHER, TYPE_EQ_PATCHER
@@ -435,12 +435,7 @@ class TestChecker(ParseMixin, TestCase):
           #arg
         """)
         node = NamesResolver('test').visit(node)
-
-        dmv = DefsMappingVisitor()
-        dmv.visit(node)
-        env = Environ({key: Unchecked(value, False)
-                       for key, value in dmv.mapping.items()})
-
+        env = Environ(def_types(node))
         node = check(node, env)
 
         foo_expr, bar_expr = node.values

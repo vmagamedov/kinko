@@ -8,8 +8,8 @@ from kinko.types import StringType, ListType, VarNamedArgs, Func, Record
 from kinko.types import IntType, Union, Markup, NamedArg
 from kinko.compat import _exec_in, PY3
 from kinko.lookup import SimpleContext
-from kinko.checker import check, Environ, NamesResolver, find_unchecked_defs
-from kinko.checker import NamesUnResolver, collect_modules, split_modules
+from kinko.checker import check, Environ, NamesResolver, def_types
+from kinko.checker import NamesUnResolver, collect_defs, split_defs
 from kinko.out.py.compiler import compile_module, dumps
 
 from .base import TestCase
@@ -284,11 +284,11 @@ class TestCompile(ParseMixin, TestCase):
         foo_node = NamesResolver('foo').visit(foo_node)
         bar_node = NamesResolver('bar').visit(bar_node)
 
-        node = collect_modules([foo_node, bar_node])
-        env = Environ(find_unchecked_defs(node))
+        node = collect_defs([foo_node, bar_node])
+        env = Environ(def_types(node))
         node = check(node, env)
 
-        modules = split_modules(node)
+        modules = split_defs(node)
 
         foo_node = modules['foo']
         bar_node = modules['bar']

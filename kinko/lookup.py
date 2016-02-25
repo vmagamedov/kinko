@@ -1,13 +1,11 @@
-from itertools import chain
 from collections import namedtuple
 
-from .nodes import NodeVisitor, List
+from .nodes import NodeVisitor
 from .utils import Buffer
 from .parser import parser
 from .compat import _exec_in
-from .checker import DefsMappingVisitor, split_modules
+from .checker import def_types, split_defs, Environ, check, collect_defs
 from .checker import NamesResolver, NamesUnResolver
-from .checker import Environ, Unchecked, check
 from .loaders import DictCache
 from .tokenizer import tokenize
 from .out.py.compiler import compile_module
@@ -89,20 +87,16 @@ class Lookup(object):
                     yield item
 
     def _check(self, parsed_sources):
-        node = List(chain.from_iterable(ps.node.values
-                                        for ps in parsed_sources))
-        dmv = DefsMappingVisitor()
-        dmv.visit(node)
-
         env = dict(self.types)
-        env.update((key, Unchecked(value, False))
-                   for key, value in dmv.mapping.items())
+
+        node = collect_defs(ps.node for ps in parsed_sources)
+        env.update(def_types(node))
 
         environ = Environ(env)
         node = check(node, environ)
 
         modules = {ns: NamesUnResolver(ns).visit(mod)
-                   for ns, mod in split_modules(node).items()}
+                   for ns, mod in split_defs(node).items()}
 
         return [ps._replace(node=modules[ps.name])
                 for ps in parsed_sources]

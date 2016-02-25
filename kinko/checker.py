@@ -95,29 +95,17 @@ class NamesUnResolver(NodeTransformer):
         return super(NamesUnResolver, self).visit_tuple(node)
 
 
-class DefsMappingVisitor(NodeVisitor):
-
-    def __init__(self):
-        self.mapping = {}
-
-    def visit_tuple(self, node):
-        if node.values[0].name == 'def':
-            self.mapping[node.values[1].name] = node
-        super(DefsMappingVisitor, self).visit_tuple(node)
+def def_types(node):
+    assert isinstance(node, List), type(node)
+    return {d.values[1].name: Unchecked(d, False)
+            for d in node.values}
 
 
-def find_unchecked_defs(node):
-    visitor = DefsMappingVisitor()
-    visitor.visit(node)
-    return {def_name: Unchecked(value, False)
-            for def_name, value in visitor.mapping.items()}
-
-
-def collect_modules(nodes):
+def collect_defs(nodes):
     return List(chain.from_iterable(node.values for node in nodes))
 
 
-def split_modules(node):
+def split_defs(node):
     mapping = defaultdict(list)
     for defn in node.values:
         name_sym = defn.values[1]
