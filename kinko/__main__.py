@@ -1,6 +1,4 @@
 import io
-import codecs
-import os.path
 import importlib
 import subprocess
 from collections import namedtuple
@@ -120,23 +118,12 @@ def convert(input, output):
 def render(path, name, types, result, output):
     """Render Kinko source into HTML."""
     from .lookup import Lookup
-    from .loaders import DictLoader
+    from .loaders import FileSystemLoader
     from .typedef import load_types
     from .readers.simple import loads
 
-    files = os.listdir(path)
-    source_files = [f for f in files if f.endswith('.kinko')]
-    source_names = [f[:-len('.kinko')] for f in source_files]
-
-    sources = {}
-    for file_name, source_name in zip(source_files, source_names):
-        with codecs.open(os.path.join(path, file_name), encoding='utf-8') as f:
-            sources[source_name] = f.read()
-
     types_ = load_types(types.read())
-
-    loader = DictLoader(sources)
-    lookup = Lookup(types_, loader)
+    lookup = Lookup(types_, FileSystemLoader(path))
 
     result_ = loads(result.read())
     output.write(lookup.render(name, result_))
