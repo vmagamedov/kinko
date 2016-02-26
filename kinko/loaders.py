@@ -1,3 +1,8 @@
+import errno
+import codecs
+import os.path
+
+
 class NamespaceNotFound(LookupError):
     pass
 
@@ -41,6 +46,33 @@ class DictLoader(LoaderBase):
             return Source(name, self._sources[name], None)
         except KeyError:
             raise NamespaceNotFound(name)
+
+
+class FileSystemLoader(LoaderBase):
+    _encoding = 'utf-8'
+    _template = '{}.kinko'
+
+    def __init__(self, path):
+        self._path = path
+
+    def is_uptodate(self, ns):
+        file_name = os.path.join(self._path, self._template.format(ns.name))
+        try:
+            return os.path.getmtime(file_name) == ns.modified_time
+        except OSError:
+            return False
+
+    def load(self, name):
+        file_name = os.path.join(self._path, self._template.format(name))
+        try:
+            with codecs.open(file_name, encoding=self._encoding) as f:
+                content = f.read()
+        except IOError as e:
+            if e.errno not in (errno.ENOENT, errno.EISDIR, errno.EINVAL):
+                raise
+            raise NamespaceNotFound(name)
+        modified_time = os.path.getmtime(file_name)
+        return Source(name, content, modified_time)
 
 
 class DictCache(CacheBase):
