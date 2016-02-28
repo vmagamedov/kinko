@@ -103,11 +103,12 @@ class TestRefs(ParseMixin, TestCase):
           span #a.name
           span y
           baz :b #a
+          span #c
 
         def foo
           div
             each i x
-              bar :a i
+              bar :a i :c 5
         """)
         node = check(node, Environ({
             'x': ListType[Record[{'name': StringType,

@@ -127,11 +127,21 @@ class Apply(Reference):
         raise NotImplementedError
 
 
+class NoReference(Exception):
+    pass
+
+
 class ArgsResolver(object):
 
     def __init__(self, args, kwargs):
         self.args = args
         self.kwargs = kwargs
+
+    def resolve(self, ref):
+        try:
+            return self.visit(ref)
+        except NoReference:
+            return None
 
     def visit(self, ref):
         return ref.accept(self)
@@ -153,23 +163,31 @@ class ArgsResolver(object):
         return RecordFieldRef(backref, ref.name)
 
     def visit_posarg(self, ref):
-        return self.args[ref.pos].backref
+        value = self.args[ref.pos]
+        if value is not None:
+            return value.backref
+        raise NoReference
 
     def visit_namedarg(self, ref):
-        return self.kwargs[ref.name].backref
+        value = self.kwargs[ref.name]
+        if value is not None:
+            return value.backref
+        raise NoReference
 
 
 def expand_apply(env, apl, args, kwargs):
     res = ArgsResolver(args, kwargs)
     for ref in env.get(apl.func, []):
         if isinstance(ref, Apply):
-            sub_args = [(a and res.visit(a)) for a in ref.args]
-            sub_kwargs = {k: (v and res.visit(v))
+            sub_args = [(a and res.resolve(a)) for a in ref.args]
+            sub_kwargs = {k: (v and res.resolve(v))
                           for k, v in ref.kwargs.items()}
             for sub_ref in expand_apply(env, ref, sub_args, sub_kwargs):
                 yield sub_ref
         else:
-            yield res.visit(ref)
+            res_ref = res.resolve(ref)
+            if res_ref is not None:
+                yield res_ref
 
 
 def resolve_refs(env, name):
