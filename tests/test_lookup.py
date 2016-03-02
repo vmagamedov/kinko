@@ -29,16 +29,16 @@ class TestLoadCode(TestCase):
 
     def testDependencies(self):
         self.assertEqual(
-            self.lookup.get('a').dependencies,
+            self.lookup._get_namespace('a').dependencies,
             {'b'},
         )
         self.assertEqual(
-            self.lookup.get('b').dependencies,
+            self.lookup._get_namespace('b').dependencies,
             set([]),
         )
 
     def testLoadDependencies(self):
-        self.assertFalse(self.lookup.namespaces)
-        ns = self.lookup.get('a')
-        self.assertEqual(set(self.lookup.namespaces.keys()), {'a', 'b'})
+        self.assertFalse(self.lookup._namespaces)
+        ns = self.lookup._get_namespace('a')
+        self.assertEqual(set(self.lookup._namespaces.keys()), {'a', 'b'})
         self.assertIsInstance(ns.module['foo'], types.FunctionType)

@@ -1,6 +1,8 @@
 from collections import namedtuple
 
+from .refs import RefsCollector, resolve_refs
 from .nodes import NodeVisitor
+from .query import gen_pattern
 from .utils import Buffer
 from .parser import parser
 from .compat import _exec_in
@@ -43,6 +45,19 @@ class SimpleContext(object):
         self.result = result
 
 
+class Function(object):
+
+    def __init__(self, lookup, name):
+        self._lookup = lookup
+        self.name = name
+
+    def query(self):
+        return self._lookup._get_query(self.name)
+
+    def render(self, result):
+        return self._lookup._render(self.name, result)
+
+
 class Context(SimpleContext):
 
     def __init__(self, lookup, result):
@@ -51,16 +66,17 @@ class Context(SimpleContext):
 
     def lookup(self, name):
         ns, _, fn_name = name.partition('/')
-        return self._lookup.get(ns).module[fn_name]
+        return self._lookup._get_namespace(ns).module[fn_name]
 
 
 class Lookup(object):
 
     def __init__(self, types, loader, cache=None):
         self.types = types
-        self.loader = loader
-        self.cache = cache or DictCache()
-        self.namespaces = {}
+        self._loader = loader
+        self._cache = cache or DictCache()
+        self._namespaces = {}
+        self._refs = {}
         self._parser = parser()
 
     def _get_dependencies(self, ns, _visited=None):
@@ -69,7 +85,7 @@ class Lookup(object):
             _visited.add(ns.name)
             yield ns
             for dep_name in ns.dependencies:
-                dep = self.namespaces[dep_name]
+                dep = self._namespaces[dep_name]
                 for item in self._get_dependencies(dep, _visited=_visited):
                     yield item
 
@@ -77,7 +93,7 @@ class Lookup(object):
         _visited = set([]) if _visited is None else _visited
         if name not in _visited:
             _visited.add(name)
-            source = self.loader.load(name)
+            source = self._loader.load(name)
             node = self._parser.parse(list(tokenize(source.content)))
             node = NamesResolver(source.name).visit(node)
             dependencies = DependenciesVisitor.get_dependencies(node)
@@ -95,11 +111,16 @@ class Lookup(object):
         environ = Environ(env)
         node = check(node, environ)
 
+        refs_collector = RefsCollector()
+        refs_collector.visit(node)
+
         modules = {ns: NamesUnResolver(ns).visit(mod)
                    for ns, mod in split_defs(node).items()}
 
-        return [ps._replace(node=modules[ps.name])
-                for ps in parsed_sources]
+        checked_sources = [ps._replace(node=modules[ps.name])
+                           for ps in parsed_sources]
+
+        return checked_sources, refs_collector.refs
 
     def _compile_module(self, name, module):
         module_code = compile(module, '<kinko:{}>'.format(name), 'exec')
@@ -107,32 +128,42 @@ class Lookup(object):
         _exec_in(module_code, globals_dict)
         return globals_dict
 
-    def load(self, name):
-        ns = self.namespaces.get(name)
+    def _load(self, name):
+        ns = self._namespaces.get(name)
         if ns is not None:
             deps = list(self._get_dependencies(ns))
-            if all(self.loader.is_uptodate(dep) for dep in deps):
+            if all(self._loader.is_uptodate(dep) for dep in deps):
                 return
 
         parsed_sources = list(self._load_sources(name))
-        checked_sources = self._check(parsed_sources)
+        checked_sources, refs = self._check(parsed_sources)
 
         modules = {cs.name: compile_module(cs.node) for cs in checked_sources}
         compiled_modules = {name: self._compile_module(name, module)
                             for name, module in modules.items()}
 
         for src in parsed_sources:
-            self.namespaces[src.name] = Namespace(src.name, src.modified_time,
-                                                  compiled_modules[src.name],
-                                                  src.dependencies)
+            self._namespaces[src.name] = Namespace(src.name, src.modified_time,
+                                                   compiled_modules[src.name],
+                                                   src.dependencies)
+        self._refs.update(refs)
 
-    def get(self, name):
-        self.load(name)
-        return self.namespaces[name]
+    def _get_namespace(self, name):
+        self._load(name)
+        return self._namespaces[name]
 
-    def render(self, name, result):
+    def _get_query(self, name):
+        ns, _, _ = name.partition('/')
+        self._load(ns)
+        refs = resolve_refs(self._refs, name)
+        return gen_pattern(refs)
+
+    def _render(self, name, result):
         ctx = Context(self, result)
         ctx.buffer.push()
         fn = ctx.lookup(name)
         fn(ctx)
         return ctx.buffer.pop()
+
+    def get(self, name):
+        return Function(self, name)
