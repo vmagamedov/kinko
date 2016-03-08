@@ -1,5 +1,7 @@
+import weakref
+
 from . import types
-from .utils import split_args, VarsGen
+from .utils import split_args
 from .nodes import NodeTransformer, Symbol
 from .parser import parser
 from .tokenizer import tokenize
@@ -28,7 +30,6 @@ class TypesConstructor(NodeTransformer):
 
     def __init__(self):
         self._types = {}
-        self._vars_gen = VarsGen()
 
     def get_types(self):
         return self._types.copy()
@@ -60,13 +61,10 @@ class TypesConstructor(NodeTransformer):
         return dict(zip(keys, values))
 
     def visit_symbol(self, node):
-        # TODO: maybe implement recursive types and forward types declaration
-        if node.name in self._types:
-            return self._types[node.name]
-        elif node.name in TYPES:
+        if node.name in TYPES:
             return TYPES[node.name]
         else:
-            return getattr(self._vars_gen, node.name)
+            return types.TypeRef[node.name]
 
     def visit_keyword(self, node):
         return node
@@ -81,9 +79,22 @@ class TypesConstructor(NodeTransformer):
         raise NotImplementedError(repr(node))
 
 
+class BindReferences(types.TypeVisitor):
+
+    def __init__(self, types_):
+        self._types = types_
+
+    def visit_typeref(self, type_):
+        type_.__ref__ = weakref.ref(self._types[type_.__ref_name__])
+
+
 def load_types(src):
     tokens = list(tokenize(src))
     node = parser().parse(tokens)
     types_constructor = TypesConstructor()
     types_constructor.visit(node)
-    return types_constructor.get_types()
+    defs = types_constructor.get_types()
+    ref_bind = BindReferences(defs)
+    for value in defs.values():
+        ref_bind.visit(value)
+    return defs

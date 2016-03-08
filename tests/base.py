@@ -51,9 +51,7 @@ def _node_eq(self, other):
 NODE_EQ_PATCHER = patch.multiple(Node, __eq__=_node_eq, __ne__=_ne)
 
 
-def _type_eq(self, other):
-    if isinstance(self, TypeVarMeta) and self.__instance__ is not None:
-        return _type_eq(self.__instance__, other)
+def _strict_type_eq(self, other):
     if type(self) is not type(other):
         return False
     d1 = dict(self.__dict__)
@@ -66,6 +64,15 @@ def _type_eq(self, other):
     d2.pop('__backref__', None)
     return d1 == d2
 
+
+def _type_eq(self, other):
+    if isinstance(self, TypeVarMeta) and self.__instance__ is not None:
+        return _type_eq(self.__instance__, other)
+    return _strict_type_eq(self, other)
+
+
+STRICT_TYPE_EQ_PATCHER = patch.multiple(GenericMeta, __eq__=_strict_type_eq,
+                                        __ne__=_ne)
 
 TYPE_EQ_PATCHER = patch.multiple(GenericMeta, __eq__=_type_eq, __ne__=_ne)
 

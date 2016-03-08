@@ -6,7 +6,8 @@ from kinko.types import StringType, Record, IntType, Func, ListType, TypeVar
 from kinko.checker import check, Environ
 from kinko.reqs.simple import to_query
 
-from .base import TestCase, REF_EQ_PATCHER, TYPE_EQ_PATCHER, NODE_EQ_PATCHER
+from .base import TestCase, REF_EQ_PATCHER, NODE_EQ_PATCHER
+from .base import STRICT_TYPE_EQ_PATCHER
 from .test_parser import ParseMixin
 
 
@@ -15,7 +16,7 @@ def ctx_var(name):
 
 
 class TestRefs(ParseMixin, TestCase):
-    ctx = [NODE_EQ_PATCHER, TYPE_EQ_PATCHER, REF_EQ_PATCHER]
+    ctx = [NODE_EQ_PATCHER, STRICT_TYPE_EQ_PATCHER, REF_EQ_PATCHER]
 
     def getRefs(self, src, env=None):
         node = check(self.parse(src), Environ(env))
@@ -32,8 +33,9 @@ class TestRefs(ParseMixin, TestCase):
             {'var': StringType},
         )
         var = node.values[0].values[2].values[1]
-        self.assertEqual(var, Symbol.typed(StringType, 'var'))
-        self.assertEqual(var.__type__.__backref__, ctx_var('var'))
+        var_type = TypeVar[StringType]
+        var_type.__backref__ = ctx_var('var')
+        self.assertEqual(var, Symbol.typed(var_type, 'var'))
 
     def testGet(self):
         node, refs = self.getRefs(
@@ -47,13 +49,13 @@ class TestRefs(ParseMixin, TestCase):
         var_attr = node.values[0].values[2].values[1]
         var = var_attr.values[1]
 
-        var_type = Record[{'attr': StringType}]
+        var_type = TypeVar[Record[{'attr': StringType}]]
+        var_type.__backref__ = ctx_var('var')
         self.assertEqual(var.__type__, var_type)
-        self.assertEqual(var.__type__.__backref__, ctx_var('var'))
 
-        self.assertEqual(var_attr.__type__, StringType)
-        self.assertEqual(var_attr.__type__.__instance__.__backref__,
-                         RecordFieldRef(var_type, 'attr'))
+        var_attr_type = TypeVar[StringType]
+        var_attr_type.__backref__ = RecordFieldRef(var_type, 'attr')
+        self.assertEqual(var_attr.__type__, var_attr_type)
 
     def testDef(self):
         node, refs = self.getRefs(
@@ -66,12 +68,11 @@ class TestRefs(ParseMixin, TestCase):
 
         arg_attr = node.values[0].values[2].values[1]
         arg = arg_attr.values[1]
-
-        self.assertEqual(arg.__type__, Record[{'attr': IntType}])
+        self.assertEqual(arg.__type__,
+                         TypeVar[Record[{'attr': TypeVar[IntType]}]])
         self.assertEqual(arg.__type__.__backref__, NamedArgRef('arg'))
-
-        self.assertEqual(arg_attr.__type__, IntType)
-        self.assertEqual(arg_attr.__type__.__instance__.__backref__,
+        self.assertEqual(arg_attr.__type__, TypeVar[TypeVar[IntType]])
+        self.assertEqual(arg_attr.__type__.__backref__,
                          RecordFieldRef(arg.__type__, 'attr'))
 
     def testEach(self):
@@ -89,10 +90,10 @@ class TestRefs(ParseMixin, TestCase):
         each_col = each.values[2]
         r_attr = each.values[3].values[1]
         self.assertEqual(each_col.__type__.__backref__, ctx_var('col'))
-        self.assertEqual(each_r.__type__.__instance__.__backref__,
-                         ListItemRef(each_col.__type__.__instance__))
-        self.assertEqual(r_attr.__type__.__instance__.__backref__,
-                         RecordFieldRef(each_r.__type__.__instance__, 'attr'))
+        self.assertEqual(each_r.__type__.__backref__,
+                         ListItemRef(each_col.__type__))
+        self.assertEqual(r_attr.__type__.__backref__,
+                         RecordFieldRef(each_r.__type__, 'attr'))
 
     def testRequirements(self):
         node = self.parse(u"""

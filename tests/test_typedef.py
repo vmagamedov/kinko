@@ -1,6 +1,7 @@
+import weakref
 from textwrap import dedent
 
-from kinko.types import Record, StringType, IntType, ListType, Func
+from kinko.types import Record, StringType, IntType, ListType, Func, TypeRef
 from kinko.typedef import load_types
 
 from .base import TestCase, TYPE_EQ_PATCHER
@@ -36,9 +37,14 @@ class TestTypeDefinition(TestCase):
 
         FooType = Record[{'name': StringType, 'type': IntType}]
 
-        BarType = Record[{'name': StringType, 'foo-list': ListType[FooType]}]
+        BarType = Record[{'name': StringType,
+                          'foo-list': ListType[TypeRef['Foo']]}]
+        BarType.__items__['foo-list'].__item_type__.__ref__ = \
+            weakref.ref(FooType)
 
-        BazType = Record[{'name': StringType, 'type': IntType, 'bar': BarType}]
+        BazType = Record[{'name': StringType, 'type': IntType,
+                          'bar': TypeRef['Bar']}]
+        BazType.__items__['bar'].__ref__ = weakref.ref(BarType)
 
         self.assertEqual(
             load_types(src),

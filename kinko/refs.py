@@ -1,5 +1,5 @@
 from .nodes import NodeVisitor
-from .types import TypeVarMeta, RecordMeta, ListTypeMeta
+from .types import TypeVarMeta, RecordMeta, ListTypeMeta, TypeRefMeta
 from .utils import split_args
 
 
@@ -222,7 +222,9 @@ class RefGen(object):
         inst = prune(var)
         if inst is None:
             return None
-        elif isinstance(inst, ListTypeMeta):
+        if isinstance(inst, TypeRefMeta):
+            inst = inst.__ref__()
+        if isinstance(inst, ListTypeMeta):
             return ListRef(self.visit(var.__backref__))
         elif isinstance(inst, RecordMeta):
             return RecordRef(self.visit(var.__backref__))

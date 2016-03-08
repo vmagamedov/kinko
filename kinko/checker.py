@@ -2,13 +2,13 @@ from itertools import chain
 from contextlib import contextmanager
 from collections import namedtuple, deque, defaultdict
 
-from .refs import PosArgRef, NamedArgRef, RecordFieldRef, ListItemRef
+from .refs import PosArgRef, NamedArgRef, RecordFieldRef, ListItemRef, Reference
 from .nodes import Tuple, Number, Keyword, String, List, Symbol, Placeholder
 from .nodes import NodeVisitor, NodeTransformer
 from .types import IntType, NamedArgMeta, StringType, ListType, VarArgsMeta
-from .types import TypeVarMeta, TypeVar, Func, NamedArg, Record
+from .types import TypeVarMeta, TypeVar, Func, NamedArg, Record, TypeRefMeta
 from .types import RecordMeta, BoolType, Union, ListTypeMeta, DictTypeMeta
-from .types import TypingMeta, UnionMeta, Nothing, Option, VarArgs
+from .types import TypingMeta, UnionMeta, Nothing, Option, VarArgs, FuncMeta
 from .types import TypeTransformer, Markup, VarNamedArgs, VarNamedArgsMeta
 from .utils import VarsGen, split_args
 from .constant import HTML_ELEMENTS
@@ -25,10 +25,9 @@ class SignatureMismatch(TypeError):
 class Environ(object):
 
     def __init__(self, defs=None):
+        self.defs = defs or {}
         self.vars = deque([{}])
-        ctx = TypeVar[None]
-        unify(ctx, Record[defs or {}], TypeVar[None])
-        self.defs = ctx.__instance__.__items__
+        self._root = TypeVar[None]
 
     @contextmanager
     def push(self, mapping):
@@ -45,7 +44,13 @@ class Environ(object):
             except KeyError:
                 continue
         else:
-            return self.defs[key]
+            type_ = self.defs[key]
+            if isinstance(type_, FuncMeta):
+                return type_
+            else:
+                var = TypeVar[type_]
+                var.__backref__ = RecordFieldRef(self._root, key)
+                return var
 
     def __contains__(self, key):
         return any(key in d for d in self.vars) or key in self.defs
@@ -175,8 +180,30 @@ def field_refs(backref, names):
 
 
 def unify(t1, t2, backref=None):
-    if isinstance(t2, TypeVarMeta) and t2.__instance__ is None:
+    """Unify `t1` to match `t2`
+
+    After unification `t1` should be equal to `t2` or `t1` would be
+    a subtype of `t2`.
+
+    `t1` may contain type variables. If `t1` comes from arguments and
+    contains a record, this record will be extended. `t1`, also, may contain
+    type references.
+
+    `t2` can not contain bound type variables, only unbound type variables
+    are allowed - they're represent polymorphic types in the function signature.
+    `t2`, also, can not contain type references.
+    """
+    if isinstance(t1, TypeRefMeta):
+        assert t1.__ref__ is not None, 'Unbound type reference {!r}'.format(t1)
+        unify(t1.__ref__(), t2, backref)
+
+    elif isinstance(t2, TypeRefMeta):
+        assert False  # type references are not expected in t2
+
+    elif isinstance(t2, TypeVarMeta) and t2.__instance__ is None:
+        assert isinstance(backref, Reference) or backref is None, repr(backref)
         t2.__instance__ = t1
+        t2.__backref__ = backref
 
     elif isinstance(t2, TypeVarMeta):
         assert False  # bound type-vars are not expected in t2
@@ -235,11 +262,12 @@ def unify(t1, t2, backref=None):
                             raise KinkoTypeError('Missing keys {} in {!r}'
                                                  .format(s2 - s1, t1))
                     for k, v2 in t2.__items__.items():
-                        unify(t1.__items__[k], v2, backref)
+                        unify(t1.__items__[k], v2, RecordFieldRef(backref, k))
                     return
 
                 elif isinstance(t1, ListTypeMeta):
-                    unify(t1.__item_type__, t2.__item_type__, backref)
+                    unify(t1.__item_type__, t2.__item_type__,
+                          ListItemRef(backref))
                     return
 
                 elif isinstance(t1, DictTypeMeta):

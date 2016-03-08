@@ -106,6 +106,26 @@ class TypeVar(with_metaclass(TypeVarMeta, object)):
     pass
 
 
+class TypeRefMeta(TypingMeta):
+    __ref__ = None
+
+    def __cls_init__(cls, name):
+        cls.__ref_name__ = name
+
+    def __repr__(cls):
+        if cls.__ref__ is None:
+            return '<{}[-]>'.format(cls.__ref_name__)
+        else:
+            return '<{}[*]>'.format(cls.__ref_name__)
+
+    def accept(cls, visitor):
+        return visitor.visit_typeref(cls)
+
+
+class TypeRef(with_metaclass(TypeRefMeta, object)):
+    pass
+
+
 class UnionMeta(TypingMeta):
 
     def __cls_init__(cls, types):
@@ -257,6 +277,64 @@ class Record(with_metaclass(RecordMeta, object)):
     pass
 
 
+class TypeVisitor(object):
+
+    def visit(self, type_):
+        return type_.accept(self)
+
+    def visit_bool(self, type_):
+        pass
+
+    def visit_nothing(self, type_):
+        pass
+
+    def visit_string(self, type_):
+        pass
+
+    def visit_int(self, type_):
+        pass
+
+    def visit_markup(self, type_):
+        pass
+
+    def visit_typevar(self, type_):
+        if type_.__instance__ is not None:
+            self.visit(type_.__instance__)
+
+    def visit_union(self, type_):
+        for t in type_.__types__:
+            self.visit(t)
+
+    def visit_option(self, type_):
+        for t in type_.__types__:
+            self.visit(t)
+
+    def visit_func(self, type_):
+        for t in type_.__args__:
+            self.visit(t)
+        self.visit(type_.__result__)
+
+    def visit_varargs(self, type_):
+        self.visit(type_.__arg_type__)
+
+    def visit_namedarg(self, type_):
+        self.visit(type_.__arg_type__)
+
+    def visit_varnamedargs(self, type_):
+        self.visit(type_.__arg_type__)
+
+    def visit_list(self, type_):
+        self.visit(type_.__item_type__)
+
+    def visit_dict(self, type_):
+        self.visit(type_.__key_type__)
+        self.visit(type_.__value_type__)
+
+    def visit_record(self, type_):
+        for value in type_.__items__.values():
+            self.visit(value)
+
+
 class TypeTransformer(object):
 
     def visit(self, type_):
@@ -280,6 +358,9 @@ class TypeTransformer(object):
     def visit_typevar(self, type_):
         return TypeVar[self.visit(type_.__instance__)
                        if type_.__instance__ is not None else None]
+
+    def visit_typeref(self, type_):
+        return TypeRef[type_.__ref_name__]
 
     def visit_union(self, type_):
         return Union[(self.visit(t) for t in type_.__types__)]
