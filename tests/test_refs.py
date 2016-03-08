@@ -1,18 +1,16 @@
-from kinko.refs import NamedArgRef, RefsCollector, RecordFieldRef, ListItemRef
-from kinko.refs import resolve_refs
+from kinko.query import Edge, Field, Link
+from kinko.refs import ArgRef, RefsCollector, FieldRef, ItemRef, extract
 from kinko.nodes import Symbol
-from kinko.query import gen_pattern
 from kinko.types import StringType, Record, IntType, Func, ListType, TypeVar
 from kinko.checker import check, Environ
-from kinko.reqs.simple import to_query
 
-from .base import TestCase, REF_EQ_PATCHER, NODE_EQ_PATCHER
+from .base import TestCase, REF_EQ_PATCHER, NODE_EQ_PATCHER, query_eq_patcher
 from .base import STRICT_TYPE_EQ_PATCHER
 from .test_parser import ParseMixin
 
 
 def ctx_var(name):
-    return RecordFieldRef(TypeVar[None], name)
+    return FieldRef(None, name)
 
 
 class TestRefs(ParseMixin, TestCase):
@@ -54,7 +52,7 @@ class TestRefs(ParseMixin, TestCase):
         self.assertEqual(var.__type__, var_type)
 
         var_attr_type = TypeVar[StringType]
-        var_attr_type.__backref__ = RecordFieldRef(var_type, 'attr')
+        var_attr_type.__backref__ = FieldRef(var_type, 'attr')
         self.assertEqual(var_attr.__type__, var_attr_type)
 
     def testDef(self):
@@ -70,10 +68,10 @@ class TestRefs(ParseMixin, TestCase):
         arg = arg_attr.values[1]
         self.assertEqual(arg.__type__,
                          TypeVar[Record[{'attr': TypeVar[IntType]}]])
-        self.assertEqual(arg.__type__.__backref__, NamedArgRef('arg'))
+        self.assertEqual(arg.__type__.__backref__, ArgRef('arg'))
         self.assertEqual(arg_attr.__type__, TypeVar[TypeVar[IntType]])
         self.assertEqual(arg_attr.__type__.__backref__,
-                         RecordFieldRef(arg.__type__, 'attr'))
+                         FieldRef(arg.__type__, 'attr'))
 
     def testEach(self):
         node, refs = self.getRefs(
@@ -91,9 +89,9 @@ class TestRefs(ParseMixin, TestCase):
         r_attr = each.values[3].values[1]
         self.assertEqual(each_col.__type__.__backref__, ctx_var('col'))
         self.assertEqual(each_r.__type__.__backref__,
-                         ListItemRef(each_col.__type__))
+                         ItemRef(each_col.__type__))
         self.assertEqual(r_attr.__type__.__backref__,
-                         RecordFieldRef(each_r.__type__, 'attr'))
+                         FieldRef(each_r.__type__, 'attr'))
 
     def testRequirements(self):
         node = self.parse(u"""
@@ -116,9 +114,10 @@ class TestRefs(ParseMixin, TestCase):
                                   'count': IntType}]],
             'y': StringType,
         }))
-        refs_collector = RefsCollector()
-        refs_collector.visit(node)
-        refs = resolve_refs(refs_collector.refs, 'foo')
-        query_pattern = gen_pattern(refs)
-        self.assertEqual(repr(to_query(query_pattern)),
-                         '[{:x [:count :name]} :y]')
+        mapping = extract(node)
+
+        with query_eq_patcher():
+            self.assertEqual(mapping['foo'],
+                             Edge([Field('y'),
+                                   Link('x', Edge([Field('count'),
+                                                   Field('name')]))]))

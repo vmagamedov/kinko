@@ -1,8 +1,7 @@
 from collections import namedtuple
 
-from .refs import RefsCollector, resolve_refs
+from .refs import extract
 from .nodes import NodeVisitor
-from .query import gen_pattern
 from .utils import Buffer
 from .parser import parser
 from .compat import _exec_in
@@ -76,7 +75,7 @@ class Lookup(object):
         self._loader = loader
         self._cache = cache or DictCache()
         self._namespaces = {}
-        self._refs = {}
+        self._reqs = {}
         self._parser = parser()
 
     def _get_dependencies(self, ns, _visited=None):
@@ -110,9 +109,7 @@ class Lookup(object):
 
         environ = Environ(env)
         node = check(node, environ)
-
-        refs_collector = RefsCollector()
-        refs_collector.visit(node)
+        reqs = extract(node)
 
         modules = {ns: NamesUnResolver(ns).visit(mod)
                    for ns, mod in split_defs(node).items()}
@@ -120,7 +117,7 @@ class Lookup(object):
         checked_sources = [ps._replace(node=modules[ps.name])
                            for ps in parsed_sources]
 
-        return checked_sources, refs_collector.refs
+        return checked_sources, reqs
 
     def _compile_module(self, name, module):
         module_code = compile(module, '<kinko:{}>'.format(name), 'exec')
@@ -146,7 +143,7 @@ class Lookup(object):
             self._namespaces[src.name] = Namespace(src.name, src.modified_time,
                                                    compiled_modules[src.name],
                                                    src.dependencies)
-        self._refs.update(refs)
+        self._reqs.update(refs)
 
     def _get_namespace(self, name):
         self._load(name)
@@ -155,8 +152,7 @@ class Lookup(object):
     def _get_query(self, name):
         ns, _, _ = name.partition('/')
         self._load(ns)
-        refs = resolve_refs(self._refs, name)
-        return gen_pattern(refs)
+        return self._reqs[name]
 
     def _render(self, name, result):
         ctx = Context(self, result)

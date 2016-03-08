@@ -2,7 +2,7 @@ from itertools import chain
 from contextlib import contextmanager
 from collections import namedtuple, deque, defaultdict
 
-from .refs import PosArgRef, NamedArgRef, RecordFieldRef, ListItemRef, Reference
+from .refs import ArgRef, FieldRef, ItemRef, Reference, is_from_arg
 from .nodes import Tuple, Number, Keyword, String, List, Symbol, Placeholder
 from .nodes import NodeVisitor, NodeTransformer
 from .types import IntType, NamedArgMeta, StringType, ListType, VarArgsMeta
@@ -49,7 +49,7 @@ class Environ(object):
                 return type_
             else:
                 var = TypeVar[type_]
-                var.__backref__ = RecordFieldRef(self._root, key)
+                var.__backref__ = FieldRef(None, key)
                 return var
 
     def __contains__(self, key):
@@ -150,23 +150,9 @@ def get_type(node):
     return t
 
 
-def get_origin(obj):
-    if isinstance(obj, TypeVarMeta):
-        if obj.__backref__ is not None:
-            return get_origin(obj.__backref__)
-    else:
-        if obj.backref is not None:
-            return get_origin(obj.backref)
-    return obj
-
-
-def is_from_arg(ref):
-    return isinstance(get_origin(ref), (NamedArgRef, PosArgRef))
-
-
 def item_ref(backref):
     v = TypeVar[None]
-    v.__backref__ = ListItemRef(backref)
+    v.__backref__ = ItemRef(backref)
     return v
 
 
@@ -174,7 +160,7 @@ def field_refs(backref, names):
     mapping = {}
     for name in names:
         v = TypeVar[None]
-        v.__backref__ = RecordFieldRef(backref, name)
+        v.__backref__ = FieldRef(backref, name)
         mapping[name] = v
     return mapping
 
@@ -262,12 +248,11 @@ def unify(t1, t2, backref=None):
                             raise KinkoTypeError('Missing keys {} in {!r}'
                                                  .format(s2 - s1, t1))
                     for k, v2 in t2.__items__.items():
-                        unify(t1.__items__[k], v2, RecordFieldRef(backref, k))
+                        unify(t1.__items__[k], v2, FieldRef(backref, k))
                     return
 
                 elif isinstance(t1, ListTypeMeta):
-                    unify(t1.__item_type__, t2.__item_type__,
-                          ListItemRef(backref))
+                    unify(t1.__item_type__, t2.__item_type__, ItemRef(backref))
                     return
 
                 elif isinstance(t1, DictTypeMeta):
@@ -395,13 +380,13 @@ def prune(t):
 
 def arg_var(name):
     t = TypeVar[None]
-    t.__backref__ = NamedArgRef(name)
+    t.__backref__ = ArgRef(name)
     return t
 
 
 def ctx_var(t, name):
     v = TypeVar[t]
-    v.__backref__ = RecordFieldRef(None, name)
+    v.__backref__ = FieldRef(None, name)
     return v
 
 
@@ -432,8 +417,9 @@ def check_def(fn_type, env, sym, body):
         body = [check(item, env) for item in body]
     args = [NamedArg[name, def_vars[name]] for name in kw_arg_names]
     unify(fn_type.__result__, Func[args, body[-1].__type__])
+    fn_type = _FreshVars().visit(fn_type)
     # register new definition type in env
-    env.define(sym.name, fn_type.__result__.__instance__)
+    env.define(sym.name, fn_type.__result__)
     return sym, body
 
 

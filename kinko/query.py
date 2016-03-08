@@ -1,4 +1,5 @@
-from .refs import ReferenceVisitor, RecordFieldRef
+from itertools import chain
+from collections import defaultdict
 
 
 class Field(object):
@@ -41,43 +42,16 @@ class Edge(object):
         return visitor.visit_edge(self)
 
 
-class RefPathExtractor(ReferenceVisitor):
-
-    def __init__(self):
-        self._stack = [Edge([])]
-
-    def _add_field(self, ref):
-        self._stack[-1].add(Field(ref.backref.name))
-
-    def _push_stack(self, ref):
-        top = self._stack[-1]
-        nxt = top.add(Link(ref.backref.name, Edge([])))
-        self._stack.append(nxt.edge)
-
-    def visit_scalar(self, ref):
-        super(RefPathExtractor, self).visit_scalar(ref)
-        self._add_field(ref)
-
-    def visit_list(self, ref):
-        super(RefPathExtractor, self).visit_list(ref)
-        if isinstance(ref.backref, RecordFieldRef):
-            self._push_stack(ref)
-
-    def visit_record(self, ref):
-        super(RefPathExtractor, self).visit_record(ref)
-        if isinstance(ref.backref, RecordFieldRef):
-            self._push_stack(ref)
-
-    def apply(self, ref):
-        self.visit(ref)
-        del self._stack[1:]
-
-    def root(self):
-        return self._stack[0]
+def _merge(edges):
+    to_merge = defaultdict(list)
+    for field in chain.from_iterable(e.fields.values() for e in edges):
+        if field.__class__ is Link:
+            to_merge[field.name].append(field.edge)
+        else:
+            yield field
+    for name, values in to_merge.items():
+        yield Link(name, Edge(_merge(values)))
 
 
-def gen_pattern(refs):
-    extractor = RefPathExtractor()
-    for ref in refs:
-        extractor.apply(ref)
-    return extractor.root()
+def merge(edges):
+    return Edge(_merge(edges))

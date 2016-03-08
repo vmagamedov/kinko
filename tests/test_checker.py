@@ -1,4 +1,4 @@
-from kinko.refs import NamedArgRef
+from kinko.refs import ArgRef
 from kinko.nodes import Tuple, Symbol, Number, Keyword, List, Placeholder
 from kinko.nodes import String
 from kinko.types import Func, IntType, StringType, NamedArg, TypeVar, Markup
@@ -125,13 +125,13 @@ class TestChecker(ParseMixin, TestCase):
 
     def testUnifySubtype(self):
         a = TypeVar[BoolType]
-        a.__backref__ = NamedArgRef('arg')
+        a.__backref__ = ArgRef('arg')
         unify(a, IntType)
         self.assertIsInstance(IntType, type(a.__instance__))
         self.assertEqual(a.__instance__, IntType)
 
         b = TypeVar[None]
-        b.__backref__ = NamedArgRef('arg')
+        b.__backref__ = ArgRef('arg')
         unify(b, Record[{'a': BoolType, 'b': BoolType}])
         unify(b, Record[{'b': IntType, 'c': IntType}])
         self.assertEqual(b, Record[{

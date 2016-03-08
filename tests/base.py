@@ -1,4 +1,5 @@
 import unittest
+from contextlib import contextmanager
 try:
     from itertools import zip_longest
     from unittest.mock import patch, Mock as _Mock
@@ -9,7 +10,7 @@ except ImportError:
 try:
     from contextlib import nested as _nested
 except ImportError:
-    from contextlib import contextmanager, ExitStack
+    from contextlib import ExitStack
 
     @contextmanager
     def _nested(*managers):
@@ -21,8 +22,15 @@ except ImportError:
 from kinko.refs import Reference
 from kinko.nodes import Node
 from kinko.types import GenericMeta, TypeVarMeta
+from kinko.query import Field, Edge, Link
 
 Mock = _Mock
+
+
+def _eq(self, other):
+    if type(self) is not type(other):
+        return False
+    return self.__dict__ == other.__dict__
 
 
 def _ne(self, other):
@@ -86,6 +94,17 @@ def _ref_eq(self, other):
 REF_EQ_PATCHER = patch.multiple(Reference, __eq__=_ref_eq, __ne__=_ne)
 
 
+_field_patch = patch.multiple(Field, __eq__=_eq, __ne__=_ne)
+_link_patch = patch.multiple(Link, __eq__=_eq, __ne__=_ne)
+_edge_patch = patch.multiple(Edge, __eq__=_eq, __ne__=_ne)
+
+
+@contextmanager
+def query_eq_patcher():
+    with _field_patch, _link_patch, _edge_patch:
+        yield
+
+
 def result_match(result, value, path=None):
     path = [] if path is None else path
     if isinstance(value, dict):
@@ -108,7 +127,6 @@ def result_match(result, value, path=None):
 class ResultMixin(object):
 
     def assertResult(self, result, value):
-        print(result)
         ok, path, subval = result_match(result, value)
         if not ok:
             path_str = 'result' + ''.join('[{!r}]'.format(v) for v in path)
