@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 setup(
     name='Kinko',
@@ -7,7 +7,7 @@ setup(
     author='Vladimir Magamedov',
     author_email='vladimir@magamedov.com',
     url='https://github.com/vmagamedov/kinko',
-    packages=['kinko'],
+    packages=find_packages(),
     license='BSD',
     install_requires=['funcparserlib', 'astor'],
     extras_require={
