@@ -111,22 +111,23 @@ def convert(input, output):
 @cli.command('render')
 @click.argument('path', type=click.Path(exists=True, file_okay=False))
 @click.argument('name')
-@click.argument('types', type=click.File(encoding='utf-8'))
-@click.argument('result', type=click.File(encoding='utf-8'))
 @click.argument('output', type=click.File(mode='w+', encoding='utf-8'),
                 default='-')
-def render(path, name, types, result, output):
+@click.option('-t', '--types', type=click.File(encoding='utf-8'))
+@click.option('-r', '--result', type=click.File(encoding='utf-8'))
+def render(path, name, output, types, result):
     """Render Kinko source into HTML."""
     from .lookup import Lookup
     from .loaders import FileSystemLoader
     from .typedef import load_types
     from .readers.simple import loads
 
-    types_ = load_types(types.read())
-    lookup = Lookup(types_, FileSystemLoader(path))
+    types_ = load_types(types.read()) if types else {}
+    result_ = loads(result.read()) if result else {}
 
-    result_ = loads(result.read())
-    output.write(lookup.render(name, result_))
+    lookup = Lookup(types_, FileSystemLoader(path))
+    fn = lookup.get(name)
+    output.write(fn.render(result_))
 
 
 if __name__ == '__main__':
