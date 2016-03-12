@@ -6,7 +6,7 @@ from kinko.types import Record, ListType, Union, DictType, Option
 from kinko.types import VarArgs, VarNamedArgs, BoolType, RecordMeta
 from kinko.checker import Environ, check, KinkoTypeError, EACH_TYPE, _FreshVars
 from kinko.checker import LET_TYPE, DEF_TYPE, GET_TYPE, IF2_TYPE, IF_SOME1_TYPE
-from kinko.checker import unify, NamesResolver, def_types
+from kinko.checker import unify, NamesResolver, def_types, IF1_TYPE, IF3_TYPE
 from kinko.checker import match_fn, restore_args, HTML_TAG_TYPE
 
 from .base import TestCase, NODE_EQ_PATCHER, TYPE_EQ_PATCHER
@@ -298,7 +298,27 @@ class TestChecker(ParseMixin, TestCase):
                  Markup],
         )
 
-    def testIf(self):
+    def testIfThen(self):
+        inc_type = Func[[IntType], IntType]
+        self.assertChecks(
+            """
+            if (inc 1) (inc 2)
+            """,
+            Tuple.typed(Option[IntType], [
+                Symbol.typed(IF1_TYPE, 'if'),
+                Tuple.typed(IntType, [
+                    Symbol.typed(inc_type, 'inc'),
+                    Number.typed(IntType, 1),
+                ]),
+                Tuple.typed(IntType, [
+                    Symbol.typed(inc_type, 'inc'),
+                    Number.typed(IntType, 2),
+                ]),
+            ]),
+            {'inc': inc_type},
+        )
+
+    def testIfThenElse(self):
         inc_type = Func[[IntType], IntType]
         self.assertChecks(
             """
@@ -314,6 +334,32 @@ class TestChecker(ParseMixin, TestCase):
                     Symbol.typed(inc_type, 'inc'),
                     Number.typed(IntType, 2),
                 ]),
+                Tuple.typed(IntType, [
+                    Symbol.typed(inc_type, 'inc'),
+                    Number.typed(IntType, 3),
+                ]),
+            ]),
+            {'inc': inc_type},
+        )
+
+    def testIfNamedThenElse(self):
+        inc_type = Func[[IntType], IntType]
+        self.assertChecks(
+            """
+            if (inc 1) :then (inc 2) :else (inc 3)
+            """,
+            Tuple.typed(Union[IntType, ], [
+                Symbol.typed(IF3_TYPE, 'if'),
+                Tuple.typed(IntType, [
+                    Symbol.typed(inc_type, 'inc'),
+                    Number.typed(IntType, 1),
+                ]),
+                Keyword('then'),
+                Tuple.typed(IntType, [
+                    Symbol.typed(inc_type, 'inc'),
+                    Number.typed(IntType, 2),
+                ]),
+                Keyword('else'),
                 Tuple.typed(IntType, [
                     Symbol.typed(inc_type, 'inc'),
                     Number.typed(IntType, 3),

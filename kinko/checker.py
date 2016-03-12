@@ -356,6 +356,10 @@ GET_TYPE = Func[[Record[{}], __var.key], __var.result]
 
 IF1_TYPE = Func[[BoolType, __var.then_], __var.result]
 IF2_TYPE = Func[[BoolType, __var.then_, __var.else_], __var.result]
+IF3_TYPE = Func[[BoolType, NamedArg['then', __var.then_],
+                 NamedArg['else', __var.else_]],
+                __var.result]
+
 
 EACH_TYPE = Func[[__var.symbol, ListType[__var.item], VarArgs[_MarkupLike]],
                  Markup]
@@ -488,6 +492,7 @@ FN_TYPES = {
     GET_TYPE: check_get,
     IF1_TYPE: check_if1,
     IF2_TYPE: check_if2,
+    IF3_TYPE: check_if2,
     EACH_TYPE: check_each,
     IF_SOME1_TYPE: check_if_some1,
     IF_SOME2_TYPE: check_if_some2,
@@ -498,7 +503,7 @@ BUILTINS = {
     'let': [LET_TYPE],
     'def': [DEF_TYPE],
     'get': [GET_TYPE],
-    'if': [IF1_TYPE, IF2_TYPE],
+    'if': [IF1_TYPE, IF2_TYPE, IF3_TYPE],
     'each': [EACH_TYPE],
     'if-some': [IF_SOME1_TYPE, IF_SOME2_TYPE],
     'join': [JOIN1_TYPE, JOIN2_TYPE],
