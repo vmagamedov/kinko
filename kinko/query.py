@@ -4,8 +4,9 @@ from collections import defaultdict
 
 class Field(object):
 
-    def __init__(self, name):
+    def __init__(self, name, options=None):
         self.name = name
+        self.options = options
 
     def __repr__(self):
         return ':{}'.format(self.name)
@@ -16,9 +17,10 @@ class Field(object):
 
 class Link(object):
 
-    def __init__(self, name, edge):
+    def __init__(self, name, edge, options=None):
         self.name = name
         self.edge = edge
+        self.options = options
 
     def __repr__(self):
         return '{{:{} {!r}}}'.format(self.name, self.edge)
