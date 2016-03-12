@@ -2,16 +2,15 @@ from json.encoder import encode_basestring
 
 from slimit import ast as js
 
-from ...types import NamedArgMeta, VarArgsMeta, VarNamedArgsMeta
-from ...utils import split_args
-from ...nodes import Tuple, Symbol, Placeholder, String, Number
-from ...compat import text_type
-from ...checker import HTML_TAG_TYPE, GET_TYPE, IF1_TYPE, IF2_TYPE, JOIN1_TYPE
-from ...checker import JOIN2_TYPE, get_type, DEF_TYPE, EACH_TYPE
-from ...checker import normalize_args
-from ...constant import SELF_CLOSING_ELEMENTS
-
-from ..common import Environ, returns_markup, contains_markup
+from ..types import NamedArgMeta, VarArgsMeta, VarNamedArgsMeta
+from ..utils import split_args
+from ..nodes import Tuple, Symbol, Placeholder, String, Number
+from ..utils import Environ
+from ..compat import text_type
+from ..checker import HTML_TAG_TYPE, GET_TYPE, IF1_TYPE, IF2_TYPE, JOIN1_TYPE
+from ..checker import JOIN2_TYPE, get_type, DEF_TYPE, EACH_TYPE
+from ..checker import normalize_args, returns_markup, contains_markup
+from ..constant import SELF_CLOSING_ELEMENTS
 
 
 def _str(value):

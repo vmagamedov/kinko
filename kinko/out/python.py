@@ -5,18 +5,16 @@ from ast import fix_missing_locations
 
 import astor
 
-from ...types import NamedArgMeta, VarArgsMeta, VarNamedArgsMeta
-from ...nodes import String, Tuple, Symbol, List, Number, Placeholder
-from ...nodes import NodeVisitor
-from ...compat import text_type
-from ...checker import split_args, normalize_args, DEF_TYPE, HTML_TAG_TYPE
-from ...checker import IF1_TYPE, IF2_TYPE, EACH_TYPE, JOIN1_TYPE, JOIN2_TYPE
-from ...checker import GET_TYPE, get_type
-from ...constant import SELF_CLOSING_ELEMENTS
-
-from ..common import Environ, returns_markup
-
-from . import ast as py
+from .. import compat_ast as py
+from ..types import NamedArgMeta, VarArgsMeta, VarNamedArgsMeta
+from ..nodes import String, Tuple, Symbol, List, Number, Placeholder
+from ..nodes import NodeVisitor
+from ..utils import Environ
+from ..compat import text_type
+from ..checker import split_args, normalize_args, DEF_TYPE, HTML_TAG_TYPE
+from ..checker import IF1_TYPE, IF2_TYPE, EACH_TYPE, JOIN1_TYPE, JOIN2_TYPE
+from ..checker import GET_TYPE, get_type, returns_markup
+from ..constant import SELF_CLOSING_ELEMENTS
 
 
 def _write(value):

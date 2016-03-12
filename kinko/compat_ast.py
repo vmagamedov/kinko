@@ -1,8 +1,6 @@
-from __future__ import absolute_import
-
 import ast as _ast
 
-from ...compat import PY3
+from .compat import PY3
 
 
 If = _ast.If

@@ -10,6 +10,7 @@ from .types import TypeVarMeta, TypeVar, Func, NamedArg, Record, TypeRefMeta
 from .types import RecordMeta, BoolType, Union, ListTypeMeta, DictTypeMeta
 from .types import TypingMeta, UnionMeta, Nothing, Option, VarArgs, FuncMeta
 from .types import TypeTransformer, Markup, VarNamedArgs, VarNamedArgsMeta
+from .types import MarkupMeta
 from .utils import VarsGen, split_args
 from .constant import HTML_ELEMENTS
 
@@ -148,6 +149,20 @@ def get_type(node):
     while isinstance(t, TypeVarMeta):
         t = t.__instance__
     return t
+
+
+def contains_markup(type_):
+    def recur_check(t):
+        if isinstance(t, UnionMeta):
+            return any(recur_check(st) for st in t.__types__)
+        else:
+            return isinstance(t, MarkupMeta)
+    return recur_check(type_)
+
+
+def returns_markup(node):
+    type_ = get_type(node)
+    return contains_markup(type_)
 
 
 def item_ref(backref):

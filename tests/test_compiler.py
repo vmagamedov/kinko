@@ -10,13 +10,13 @@ from kinko.compat import _exec_in, PY3
 from kinko.lookup import SimpleContext
 from kinko.checker import check, Environ, NamesResolver, def_types
 from kinko.checker import NamesUnResolver, collect_defs, split_defs
-from kinko.out.py.compiler import compile_module, dumps
+from kinko.out.python import compile_module, dumps
 
 from .base import TestCase
 from .test_parser import ParseMixin
 
 
-class TestCompile(ParseMixin, TestCase):
+class TestCompiler(ParseMixin, TestCase):
 
     def compareSources(self, first, second):
         first = first.strip()

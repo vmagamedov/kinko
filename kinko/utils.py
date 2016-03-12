@@ -1,4 +1,6 @@
 import io
+from contextlib import contextmanager
+from collections import Counter
 
 from .nodes import Keyword
 from .types import TypeVar
@@ -48,3 +50,26 @@ def split_args(args):
                 _pos_args.append(arg)
     except StopIteration:
         return _pos_args, _kw_args
+
+
+class Environ(object):
+
+    def __init__(self):
+        self.vars = Counter()
+
+    def __getitem__(self, key):
+        i = self.vars[key]
+        return '{}_{}'.format(key, i) if i > 1 else key
+
+    def __contains__(self, key):
+        return key in self.vars
+
+    @contextmanager
+    def push(self, names):
+        for name in names:
+            self.vars[name] += 1
+        try:
+            yield
+        finally:
+            for name in names:
+                self.vars[name] -= 1

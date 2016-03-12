@@ -5,7 +5,7 @@ from textwrap import dedent
 from kinko.types import StringType, ListType, Func, VarNamedArgs, Record
 from kinko.types import IntType, NamedArg, Markup
 from kinko.checker import check, Environ
-from kinko.out.js.incremental_dom import compile_module, dumps
+from kinko.out.incremental_dom import compile_module, dumps
 
 from .base import TestCase
 from .test_parser import ParseMixin
