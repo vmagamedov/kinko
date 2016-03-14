@@ -13,7 +13,7 @@ from ..utils import Environ
 from ..compat import text_type, text_type_name
 from ..checker import split_args, normalize_args, DEF_TYPE, HTML_TAG_TYPE
 from ..checker import IF1_TYPE, IF2_TYPE, EACH_TYPE, JOIN1_TYPE, JOIN2_TYPE
-from ..checker import GET_TYPE, get_type, returns_markup
+from ..checker import GET_TYPE, get_type, returns_markup, IF3_TYPE
 from ..constant import SELF_CLOSING_ELEMENTS
 
 
@@ -188,6 +188,7 @@ def compile_func_expr(env, node, *norm_args):
 EXPR_TYPES = {
     IF1_TYPE: compile_if1_expr,
     IF2_TYPE: compile_if2_expr,
+    IF3_TYPE: compile_if2_expr,
     JOIN2_TYPE: compile_join2_expr,
     GET_TYPE: compile_get_expr,
 }
@@ -289,6 +290,7 @@ STMT_TYPES = {
     HTML_TAG_TYPE: compile_html_tag_stmt,
     IF1_TYPE: compile_if1_stmt,
     IF2_TYPE: compile_if2_stmt,
+    IF3_TYPE: compile_if2_stmt,
     EACH_TYPE: compile_each_stmt,
     JOIN1_TYPE: compile_join1_stmt,
     GET_TYPE: compile_get_stmt,

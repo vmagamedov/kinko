@@ -173,68 +173,76 @@ class TestCompiler(ParseMixin, TestCase):
                            Markup]},
         )
 
-    def testIf(self):
-        # FIXME: implement these signatures
-        # self.assertCompiles(
-        #     """
-        #     if 1
-        #       :then
-        #         div "Trueish"
-        #       :else
-        #         div "Falseish"
-        #     """,
-        #     """
-        #     if 1:
-        #         ctx.buffer.write('<div>Trueish</div>')
-        #     else:
-        #         ctx.buffer.write('<div>Falseish</div>')
-        #     """,
-        # )
-        # self.assertCompiles(
-        #     """
-        #     if 1
-        #       :then
-        #         div "Trueish"
-        #     """,
-        #     """
-        #     if 1:
-        #         ctx.buffer.write('<div>Trueish</div>')
-        #     """,
-        # )
+    def testIfThenStatement(self):
         self.assertCompiles(
             """
-            if 1
-              div "Trueish"
+            if 1 (h1)
             """,
             """
             if 1:
-                ctx.buffer.write('<div>Trueish</div>')
+                ctx.buffer.write('<h1></h1>')
             """,
         )
+
+    def testIfThenExpression(self):
         self.assertCompiles(
             """
-            div
-              if (if 1 "true" "false")
-                span "Trueish"
+            div :class (if 1 "a")
             """,
             """
-            ctx.buffer.write('<div>')
-            if ('true' if 1 else 'false'):
-                ctx.buffer.write('<span>Trueish</span>')
-            ctx.buffer.write('</div>')
+            ctx.buffer.write('<div class="')
+            ctx.buffer.write(('a' if 1 else None))
+            ctx.buffer.write('"></div>')
             """,
         )
+
+    def testIfThenElseStatement(self):
         self.assertCompiles(
             """
-            div
-              if (if 1 "true")
-                span "Trueish"
+            if 1 (h1) (h2)
             """,
             """
-            ctx.buffer.write('<div>')
-            if ('true' if 1 else None):
-                ctx.buffer.write('<span>Trueish</span>')
-            ctx.buffer.write('</div>')
+            if 1:
+                ctx.buffer.write('<h1></h1>')
+            else:
+                ctx.buffer.write('<h2></h2>')
+            """,
+        )
+
+    def testIfThenElseExpression(self):
+        self.assertCompiles(
+            """
+            div :class (if 1 "a" "b")
+            """,
+            """
+            ctx.buffer.write('<div class="')
+            ctx.buffer.write(('a' if 1 else 'b'))
+            ctx.buffer.write('"></div>')
+            """,
+        )
+
+    def testIfNamedThenElseStatement(self):
+        self.assertCompiles(
+            """
+            if 1 :then (h1) :else (h2)
+            """,
+            """
+            if 1:
+                ctx.buffer.write('<h1></h1>')
+            else:
+                ctx.buffer.write('<h2></h2>')
+            """,
+        )
+
+    def testIfNamedThenElseExpression(self):
+        self.assertCompiles(
+            """
+            div :class (if 1 :then "a" :else "b")
+            """,
+            """
+            ctx.buffer.write('<div class="')
+            ctx.buffer.write(('a' if 1 else 'b'))
+            ctx.buffer.write('"></div>')
             """,
         )
 
