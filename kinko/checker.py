@@ -379,8 +379,8 @@ IF3_TYPE = Func[[BoolType, NamedArg['then', __var.then_],
 EACH_TYPE = Func[[__var.symbol, ListType[__var.item], VarArgs[_MarkupLike]],
                  Markup]
 
-IF_SOME1_TYPE = Func[[__var.test, __var.then_], __var.result]
-IF_SOME2_TYPE = Func[[__var.test, __var.then_, __var.else_], __var.result]
+IF_SOME1_TYPE = Func[[__var.bind, __var.then_], __var.result]
+IF_SOME2_TYPE = Func[[__var.bind, __var.then_, __var.else_], __var.result]
 
 HTML_TAG_TYPE = Func[[VarNamedArgs[_StringLike], VarArgs[_MarkupLike]],
                      Markup]
@@ -477,9 +477,9 @@ def check_each(fn_type, env, var, col, body):
     return var, col, body
 
 
-def check_if_some1(fn_type, env, bindings, then_):
-    assert isinstance(bindings, List)
-    bind_sym, bind_expr = bindings.values
+def check_if_some1(fn_type, env, bind, then_):
+    assert isinstance(bind, List)
+    bind_sym, bind_expr = bind.values
     assert isinstance(bind_sym, Symbol)
     bind_expr = check(bind_expr, env)
     bind_expr_type = get_type(bind_expr)

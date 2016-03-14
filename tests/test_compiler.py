@@ -4,7 +4,7 @@ from __future__ import unicode_literals
 import difflib
 from textwrap import dedent
 
-from kinko.types import StringType, ListType, VarNamedArgs, Func, Record
+from kinko.types import StringType, ListType, VarNamedArgs, Func, Record, Option
 from kinko.types import IntType, Union, Markup, NamedArg
 from kinko.compat import _exec_in, PY3, text_type_name
 from kinko.lookup import SimpleContext
@@ -244,6 +244,39 @@ class TestCompiler(ParseMixin, TestCase):
             ctx.buffer.write(('a' if 1 else 'b'))
             ctx.buffer.write('"></div>')
             """,
+        )
+
+    def testIfSomeStatement(self):
+        self.assertCompiles(
+            """
+            if-some [x foo.bar]
+              h1 (inc x)
+            """,
+            """
+            x = ctx.result['foo']['bar']
+            if (x is not None):
+                ctx.buffer.write('<h1>')
+                ctx.buffer.write(builtins.inc(x))
+                ctx.buffer.write('</h1>')
+            """,
+            {'foo': Record[{'bar': Option[IntType]}],
+             'inc': Func[[IntType], IntType]},
+        )
+
+    def testIfSomeExpression(self):
+        expr = ("[(builtins.inc(x) if (x is not None) else None) "
+                "for x in [ctx.result['foo']['bar']]][0]")
+        self.assertCompiles(
+            """
+            div :class (if-some [x foo.bar] (inc x))
+            """,
+            """
+            ctx.buffer.write('<div class="')
+            ctx.buffer.write({})
+            ctx.buffer.write('"></div>')
+            """.format(expr),
+            {'foo': Record[{'bar': Option[IntType]}],
+             'inc': Func[[IntType], IntType]},
         )
 
     def testGet(self):

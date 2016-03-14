@@ -14,6 +14,7 @@ from ..compat import text_type, text_type_name
 from ..checker import split_args, normalize_args, DEF_TYPE, HTML_TAG_TYPE
 from ..checker import IF1_TYPE, IF2_TYPE, EACH_TYPE, JOIN1_TYPE, JOIN2_TYPE
 from ..checker import GET_TYPE, get_type, returns_markup, IF3_TYPE
+from ..checker import IF_SOME1_TYPE
 from ..constant import SELF_CLOSING_ELEMENTS
 
 
@@ -148,6 +149,22 @@ def compile_if2_expr(env, node, test, then_, else_):
     return py.IfExp(test_expr, then_expr, else_expr)
 
 
+def compile_if_some1_expr(env, node, bind, then_):
+    sym, value = bind.values
+    value_expr = compile_expr(env, value)
+    with env.push([sym.name]):
+        test_expr = py.Compare(py.Name(env[sym.name], py.Load()),
+                               [py.IsNot()], [py.Name('None', py.Load())])
+        then_expr = compile_expr(env, then_)
+        if_expr = py.IfExp(test_expr, then_expr, py.Name('None', py.Load()))
+        list_comp = py.ListComp(
+            if_expr,
+            [py.comprehension(py.Name(env[sym.name], py.Store()),
+                              py.List([value_expr], py.Load()), [])],
+        )
+        return py.Subscript(list_comp, py.Index(py.Num(0)), py.Load())
+
+
 def compile_join2_expr(env, node, sep, values):
     sep_expr = compile_expr(env, sep)
     values_expr = compile_expr(env, values)
@@ -189,6 +206,7 @@ EXPR_TYPES = {
     IF1_TYPE: compile_if1_expr,
     IF2_TYPE: compile_if2_expr,
     IF3_TYPE: compile_if2_expr,
+    IF_SOME1_TYPE: compile_if_some1_expr,
     JOIN2_TYPE: compile_join2_expr,
     GET_TYPE: compile_get_expr,
 }
@@ -268,6 +286,16 @@ def compile_if2_stmt(env, node, test, then_, else_):
                 list(_yield_writes(env, else_)))
 
 
+def compile_if_some1_stmt(env, node, bind, then_):
+    sym, value = bind.values
+    value_expr = compile_expr(env, value)
+    with env.push([sym.name]):
+        yield py.Assign([py.Name(env[sym.name], py.Store())], value_expr)
+        test_expr = py.Compare(py.Name(env[sym.name], py.Load()),
+                               [py.IsNot()], [py.Name('None', py.Load())])
+        yield py.If(test_expr, list(_yield_writes(env, then_)), [])
+
+
 def compile_each_stmt(env, node, var, col, body):
     with env.push([var.name]):
         yield py.For(py.Name(env[var.name], py.Store()), compile_expr(env, col),
@@ -291,6 +319,7 @@ STMT_TYPES = {
     IF1_TYPE: compile_if1_stmt,
     IF2_TYPE: compile_if2_stmt,
     IF3_TYPE: compile_if2_stmt,
+    IF_SOME1_TYPE: compile_if_some1_stmt,
     EACH_TYPE: compile_each_stmt,
     JOIN1_TYPE: compile_join1_stmt,
     GET_TYPE: compile_get_stmt,
