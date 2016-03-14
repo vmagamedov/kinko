@@ -10,3 +10,4 @@ sandbox*
 .tox
 .coverage
 .idea
+.cache
