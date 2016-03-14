@@ -135,14 +135,14 @@ class _Optimizer(NodeTransformer):
         node.body = list(self._paste(node.body))
 
 
-def compile_let_expr(env, node, bindings, body):
+def compile_let_expr(env, node, bindings, expr):
     names, values = bindings.values[::2], bindings.values[1::2]
     value_exprs = [compile_expr(env, value) for value in values]
     with env.push([sym.name for sym in names]):
         vars_ = py.Tuple([py.Name(env[sym.name], py.Store()) for sym in names],
                          py.Store())
         list_comp = py.ListComp(
-            compile_expr(env, body[-1]),
+            compile_expr(env, expr),
             [py.comprehension(vars_, py.List([py.Tuple(value_exprs, py.Load())],
                                              py.Load()), [])],
         )
@@ -270,15 +270,14 @@ def compile_def_stmt(env, node, name_sym, body):
                                  list(compile_stmts(env, body)), [])
 
 
-def compile_let_stmt(env, node, bindings, body):
+def compile_let_stmt(env, node, bindings, expr):
     names, values = bindings.values[::2], bindings.values[1::2]
     value_exprs = [compile_expr(env, value) for value in values]
     with env.push([sym.name for sym in names]):
         for sym, value_expr in zip(names, value_exprs):
             yield py.Assign([py.Name(env[sym.name], py.Store())], value_expr)
-        for arg in body:
-            for item in _yield_writes(env, arg):
-                yield item
+        for item in _yield_writes(env, expr):
+            yield item
 
 
 def compile_html_tag_stmt(env, node, attrs, body):

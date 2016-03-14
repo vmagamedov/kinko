@@ -363,7 +363,7 @@ _MarkupLike = Union[_StringLike, Markup]
 
 __var = VarsGen()
 
-LET_TYPE = Func[[__var.pairs, VarArgs[__var.body]], __var.result]
+LET_TYPE = Func[[__var.bindings, __var.expr], __var.result]
 
 DEF_TYPE = Func[[__var.name, VarArgs[__var.body]], __var.result]
 
@@ -409,21 +409,21 @@ def ctx_var(t, name):
     return v
 
 
-def check_let(fn_type, env, pairs, body):
-    assert isinstance(pairs, List), repr(pairs)
+def check_let(fn_type, env, bindings, expr):
+    assert isinstance(bindings, List), repr(bindings)
     let_vars = {}
-    typed_pairs = []
-    for let_sym, let_expr in zip(pairs.values[::2], pairs.values[1::2]):
+    typed_bindings = []
+    for let_sym, let_expr in zip(bindings.values[::2], bindings.values[1::2]):
         assert isinstance(let_sym, Symbol), repr(let_sym)
         let_expr = check(let_expr, env)
         let_sym = Symbol.typed(let_expr.__type__, let_sym.name)
         let_vars[let_sym.name] = let_sym.__type__
-        typed_pairs.append(let_sym)
-        typed_pairs.append(let_expr)
+        typed_bindings.append(let_sym)
+        typed_bindings.append(let_expr)
     with env.push(let_vars):
-        typed_body = [check(item, env) for item in body]
-    unify(fn_type.__result__, typed_body[-1].__type__)
-    return List(typed_pairs), typed_body
+        typed_expr = check(expr, env)
+    unify(fn_type.__result__, typed_expr.__type__)
+    return List(typed_bindings), typed_expr
 
 
 def check_def(fn_type, env, sym, body):
