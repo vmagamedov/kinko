@@ -173,6 +173,32 @@ class TestCompiler(ParseMixin, TestCase):
                            Markup]},
         )
 
+    def testLetStatement(self):
+        self.assertCompiles(
+            """
+            let [x 1 y 2]
+              h1
+            """,
+            """
+            x = 1
+            y = 2
+            ctx.buffer.write('<h1></h1>')
+            """,
+        )
+
+    def testLetExpression(self):
+        self.assertCompiles(
+            """
+            div :class (let [x 1 y 2] (add x y))
+            """,
+            """
+            ctx.buffer.write('<div class="')
+            ctx.buffer.write([builtins.add(x, y) for (x, y) in [(1, 2)]][0])
+            ctx.buffer.write('"></div>')
+            """,
+            {'add': Func[[IntType, IntType], IntType]},
+        )
+
     def testIfThenStatement(self):
         self.assertCompiles(
             """

@@ -16,6 +16,7 @@ Index = _ast.Index
 Store = _ast.Store
 IfExp = _ast.IfExp
 IsNot = _ast.IsNot
+Tuple = _ast.Tuple
 Module = _ast.Module
 Assign = _ast.Assign
 Compare = _ast.Compare

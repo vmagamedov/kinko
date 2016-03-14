@@ -14,7 +14,7 @@ from ..compat import text_type, text_type_name
 from ..checker import split_args, normalize_args, DEF_TYPE, HTML_TAG_TYPE
 from ..checker import IF1_TYPE, IF2_TYPE, EACH_TYPE, JOIN1_TYPE, JOIN2_TYPE
 from ..checker import GET_TYPE, get_type, returns_markup, IF3_TYPE
-from ..checker import IF_SOME1_TYPE
+from ..checker import IF_SOME1_TYPE, LET_TYPE
 from ..constant import SELF_CLOSING_ELEMENTS
 
 
@@ -135,6 +135,20 @@ class _Optimizer(NodeTransformer):
         node.body = list(self._paste(node.body))
 
 
+def compile_let_expr(env, node, bindings, body):
+    names, values = bindings.values[::2], bindings.values[1::2]
+    value_exprs = [compile_expr(env, value) for value in values]
+    with env.push([sym.name for sym in names]):
+        vars_ = py.Tuple([py.Name(env[sym.name], py.Store()) for sym in names],
+                         py.Store())
+        list_comp = py.ListComp(
+            compile_expr(env, body[-1]),
+            [py.comprehension(vars_, py.List([py.Tuple(value_exprs, py.Load())],
+                                             py.Load()), [])],
+        )
+        return py.Subscript(list_comp, py.Index(py.Num(0)), py.Load())
+
+
 def compile_if1_expr(env, node, test, then_):
     test_expr = compile_expr(env, test)
     then_expr = compile_expr(env, then_)
@@ -203,6 +217,7 @@ def compile_func_expr(env, node, *norm_args):
 
 
 EXPR_TYPES = {
+    LET_TYPE: compile_let_expr,
     IF1_TYPE: compile_if1_expr,
     IF2_TYPE: compile_if2_expr,
     IF3_TYPE: compile_if2_expr,
@@ -253,6 +268,17 @@ def compile_def_stmt(env, node, name_sym, body):
             yield py.FunctionDef(name_sym.name,
                                  py.arguments(py_args, None, None, []),
                                  list(compile_stmts(env, body)), [])
+
+
+def compile_let_stmt(env, node, bindings, body):
+    names, values = bindings.values[::2], bindings.values[1::2]
+    value_exprs = [compile_expr(env, value) for value in values]
+    with env.push([sym.name for sym in names]):
+        for sym, value_expr in zip(names, value_exprs):
+            yield py.Assign([py.Name(env[sym.name], py.Store())], value_expr)
+        for arg in body:
+            for item in _yield_writes(env, arg):
+                yield item
 
 
 def compile_html_tag_stmt(env, node, attrs, body):
@@ -315,6 +341,7 @@ def compile_get_stmt(env, node, obj, attr):
 
 STMT_TYPES = {
     DEF_TYPE: compile_def_stmt,
+    LET_TYPE: compile_let_stmt,
     HTML_TAG_TYPE: compile_html_tag_stmt,
     IF1_TYPE: compile_if1_stmt,
     IF2_TYPE: compile_if2_stmt,
