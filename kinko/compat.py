@@ -23,9 +23,11 @@ if PY3:
         getattr(builtins, 'exec')(source, globals_dict)
 
     text_type = str
+    text_type_name = 'str'
 
 else:
     def _exec_in(source, globals_dict):
         exec('exec source in globals_dict')
 
     text_type = unicode  # noqa
+    text_type_name = 'unicode'

@@ -6,7 +6,7 @@ from textwrap import dedent
 
 from kinko.types import StringType, ListType, VarNamedArgs, Func, Record
 from kinko.types import IntType, Union, Markup, NamedArg
-from kinko.compat import _exec_in, PY3
+from kinko.compat import _exec_in, PY3, text_type_name
 from kinko.lookup import SimpleContext
 from kinko.checker import check, Environ, NamesResolver, def_types
 from kinko.checker import NamesUnResolver, collect_defs, split_defs
@@ -64,7 +64,7 @@ class TestCompiler(ParseMixin, TestCase):
             {'baz': StringType},
         )
 
-    def testJoin(self):
+    def testJoinMarkup(self):
         self.assertCompiles(
             """
             div
@@ -75,22 +75,18 @@ class TestCompiler(ParseMixin, TestCase):
             ctx.buffer.write('<div><div>one</div><div>two</div></div>')
             """,
         )
-        # self.assertCompiles(
-        #     """
-        #     div :class (join [1 2 3])
-        #     """,
-        #     """
-        #     ctx.buffer.write('<div class="123"></div>')
-        #     """,
-        # )
-        # self.assertCompiles(
-        #     """
-        #     div :class (join " " [1 2 3])
-        #     """,
-        #     """
-        #     ctx.buffer.write('<div class="1 2 3"></div>')
-        #     """,
-        # )
+
+    def testJoinStr(self):
+        self.assertCompiles(
+            """
+            div :class (join "SEP" [1 2 3])
+            """,
+            """
+            ctx.buffer.write('<div class="')
+            ctx.buffer.write('SEP'.join(({}(_i) for _i in [1, 2, 3])))
+            ctx.buffer.write('"></div>')
+            """.format(text_type_name),
+        )
 
     def testEach(self):
         self.assertCompiles(

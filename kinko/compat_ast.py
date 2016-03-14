@@ -11,11 +11,14 @@ Expr = _ast.Expr
 Call = _ast.Call
 Name = _ast.Name
 Load = _ast.Load
+List = _ast.List
 Index = _ast.Index
 Store = _ast.Store
 IfExp = _ast.IfExp
 Module = _ast.Module
 Subscript = _ast.Subscript
+GeneratorExp = _ast.GeneratorExp
+comprehension = _ast.comprehension
 
 
 if PY3:

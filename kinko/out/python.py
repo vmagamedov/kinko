@@ -10,7 +10,7 @@ from ..types import NamedArgMeta, VarArgsMeta, VarNamedArgsMeta
 from ..nodes import String, Tuple, Symbol, List, Number, Placeholder
 from ..nodes import NodeVisitor
 from ..utils import Environ
-from ..compat import text_type
+from ..compat import text_type, text_type_name
 from ..checker import split_args, normalize_args, DEF_TYPE, HTML_TAG_TYPE
 from ..checker import IF1_TYPE, IF2_TYPE, EACH_TYPE, JOIN1_TYPE, JOIN2_TYPE
 from ..checker import GET_TYPE, get_type, returns_markup
@@ -148,6 +148,20 @@ def compile_if2_expr(env, node, test, then_, else_):
     return py.IfExp(test_expr, then_expr, else_expr)
 
 
+def compile_join2_expr(env, node, sep, values):
+    sep_expr = compile_expr(env, sep)
+    values_expr = compile_expr(env, values)
+    join = py.Attribute(sep_expr, 'join', py.Load())
+    with env.push(['_i']):
+        values_gen = py.GeneratorExp(
+            py.Call(py.Name(text_type_name, py.Load()),
+                    [py.Name(env['_i'], py.Load())], [], None, None),
+            [py.comprehension(py.Name(env['_i'], py.Store()),
+                              values_expr, [])],
+        )
+    return py.Call(join, [values_gen], [], None, None)
+
+
 def compile_get_expr(env, node, obj, attr):
     obj_expr = compile_expr(env, obj)
     return py.Subscript(obj_expr, py.Index(py.Str(attr.name)), py.Load())
@@ -174,6 +188,7 @@ def compile_func_expr(env, node, *norm_args):
 EXPR_TYPES = {
     IF1_TYPE: compile_if1_expr,
     IF2_TYPE: compile_if2_expr,
+    JOIN2_TYPE: compile_join2_expr,
     GET_TYPE: compile_get_expr,
 }
 
@@ -201,6 +216,9 @@ def compile_expr(env, node):
 
     elif isinstance(node, Number):
         return py.Num(node.value)
+
+    elif isinstance(node, List):
+        return py.List([compile_expr(env, e) for e in node.values], py.Load())
 
     else:
         raise TypeError('Unable to compile {!r} of type {!r} as expression'
@@ -261,14 +279,6 @@ def compile_join1_stmt(env, node, col):
             yield item
 
 
-def compile_join2_stmt(env, node, sep, col):
-    for i, value in enumerate(col.values):
-        if i:
-            yield _write_str(sep.value)
-        for item in _yield_writes(env, value):
-            yield item
-
-
 def compile_get_stmt(env, node, obj, attr):
     obj_expr = compile_expr(env, obj)
     yield _write(py.Subscript(obj_expr, py.Index(py.Str(attr.name)), py.Load()))
@@ -281,7 +291,6 @@ STMT_TYPES = {
     IF2_TYPE: compile_if2_stmt,
     EACH_TYPE: compile_each_stmt,
     JOIN1_TYPE: compile_join1_stmt,
-    JOIN2_TYPE: compile_join2_stmt,
     GET_TYPE: compile_get_stmt,
 }
 

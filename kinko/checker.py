@@ -386,7 +386,7 @@ HTML_TAG_TYPE = Func[[VarNamedArgs[_StringLike], VarArgs[_MarkupLike]],
                      Markup]
 
 JOIN1_TYPE = Func[[ListType[_MarkupLike]], Markup]
-JOIN2_TYPE = Func[[StringType, ListType[_MarkupLike]], Markup]
+JOIN2_TYPE = Func[[StringType, ListType[_StringLike]], StringType]
 
 del __var
 
