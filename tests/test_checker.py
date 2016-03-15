@@ -7,7 +7,8 @@ from kinko.types import VarArgs, VarNamedArgs, BoolType, RecordMeta
 from kinko.checker import Environ, check, KinkoTypeError, EACH_TYPE, _FreshVars
 from kinko.checker import LET_TYPE, DEF_TYPE, GET_TYPE, IF2_TYPE, IF_SOME1_TYPE
 from kinko.checker import unify, NamesResolver, def_types, IF1_TYPE, IF3_TYPE
-from kinko.checker import match_fn, restore_args, HTML_TAG_TYPE
+from kinko.checker import match_fn, restore_args, HTML_TAG_TYPE, IF_SOME2_TYPE
+from kinko.checker import IF_SOME3_TYPE
 
 from .base import TestCase, NODE_EQ_PATCHER, TYPE_EQ_PATCHER
 from .test_parser import ParseMixin
@@ -395,6 +396,70 @@ class TestChecker(ParseMixin, TestCase):
         )
         with self.assertRaises(KinkoTypeError):
             self.check('inc foo.bar', env)
+
+    def testIfSomeElse(self):
+        inc_type = Func[[IntType], IntType]
+        dec_type = Func[[IntType], IntType]
+        foo_type = Record[{'bar': Option[IntType]}]
+        env = {'inc': inc_type, 'dec': dec_type, 'foo': foo_type}
+        self.assertChecks(
+            """
+            if-some [x foo.bar] (inc x) (dec x)
+            """,
+            Tuple.typed(Union[IntType, IntType], [
+                Symbol.typed(IF_SOME2_TYPE, 'if-some'),
+                List([
+                    Symbol('x'),
+                    Tuple.typed(Option[IntType], [
+                        Symbol.typed(GET_TYPE, 'get'),
+                        Symbol.typed(foo_type, 'foo'),
+                        Symbol('bar'),
+                    ]),
+                ]),
+                Tuple.typed(IntType, [
+                    Symbol.typed(inc_type, 'inc'),
+                    Symbol.typed(Union[IntType, ], 'x'),
+                ]),
+                Tuple.typed(IntType, [
+                    Symbol.typed(dec_type, 'dec'),
+                    Symbol.typed(Union[IntType, ], 'x'),
+                ]),
+            ]),
+            env,
+        )
+
+    def testIfSomeNamedElse(self):
+        inc_type = Func[[IntType], IntType]
+        dec_type = Func[[IntType], IntType]
+        foo_type = Record[{'bar': Option[IntType]}]
+        env = {'inc': inc_type, 'dec': dec_type, 'foo': foo_type}
+        self.assertChecks(
+            """
+            if-some [x foo.bar] :then (inc x) :else (dec x)
+            """,
+            Tuple.typed(Union[IntType, IntType], [
+                Symbol.typed(IF_SOME3_TYPE, 'if-some'),
+                List([
+                    Symbol('x'),
+                    Tuple.typed(Option[IntType], [
+                        Symbol.typed(GET_TYPE, 'get'),
+                        Symbol.typed(foo_type, 'foo'),
+                        Symbol('bar'),
+                    ]),
+                ]),
+                Keyword('then'),
+                Tuple.typed(IntType, [
+                    Symbol.typed(inc_type, 'inc'),
+                    Symbol.typed(Union[IntType, ], 'x'),
+                ]),
+                Keyword('else'),
+                Tuple.typed(IntType, [
+                    Symbol.typed(dec_type, 'dec'),
+                    Symbol.typed(Union[IntType, ], 'x'),
+                ]),
+            ]),
+            env,
+        )
 
     def testEach(self):
         inc_type = Func[[IntType], IntType]

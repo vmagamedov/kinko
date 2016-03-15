@@ -381,6 +381,9 @@ EACH_TYPE = Func[[__var.symbol, ListType[__var.item], VarArgs[_MarkupLike]],
 
 IF_SOME1_TYPE = Func[[__var.bind, __var.then_], __var.result]
 IF_SOME2_TYPE = Func[[__var.bind, __var.then_, __var.else_], __var.result]
+IF_SOME3_TYPE = Func[[__var.bind, NamedArg['then', __var.then_],
+                      NamedArg['else', __var.else_]],
+                     __var.result]
 
 HTML_TAG_TYPE = Func[[VarNamedArgs[_StringLike], VarArgs[_MarkupLike]],
                      Markup]
@@ -497,8 +500,25 @@ def check_if_some1(fn_type, env, bind, then_):
     return List([bind_sym, bind_expr]), then_
 
 
-def check_if_some2():
-    raise NotImplementedError
+def check_if_some2(fn_type, env, bind, then_, else_):
+    assert isinstance(bind, List)
+    bind_sym, bind_expr = bind.values
+    assert isinstance(bind_sym, Symbol)
+    bind_expr = check(bind_expr, env)
+    bind_expr_type = get_type(bind_expr)
+    if (
+        isinstance(bind_expr_type, UnionMeta) and
+        Nothing in bind_expr_type.__types__
+    ):
+        then_expr_type = Union[bind_expr_type.__types__ - {Nothing}]
+    else:
+        # TODO: warn that this check is not necessary
+        then_expr_type = bind_expr_type
+    with env.push({bind_sym.name: then_expr_type}):
+        then_ = check(then_, env)
+        else_ = check(else_, env)
+    unify(fn_type.__result__, Union[then_.__type__, else_.__type__])
+    return List([bind_sym, bind_expr]), then_, else_
 
 
 FN_TYPES = {
@@ -511,6 +531,7 @@ FN_TYPES = {
     EACH_TYPE: check_each,
     IF_SOME1_TYPE: check_if_some1,
     IF_SOME2_TYPE: check_if_some2,
+    IF_SOME3_TYPE: check_if_some2,
 }
 
 
@@ -520,7 +541,7 @@ BUILTINS = {
     'get': [GET_TYPE],
     'if': [IF1_TYPE, IF2_TYPE, IF3_TYPE],
     'each': [EACH_TYPE],
-    'if-some': [IF_SOME1_TYPE, IF_SOME2_TYPE],
+    'if-some': [IF_SOME1_TYPE, IF_SOME2_TYPE, IF_SOME3_TYPE],
     'join': [JOIN1_TYPE, JOIN2_TYPE],
 }
 for tag_name in HTML_ELEMENTS:

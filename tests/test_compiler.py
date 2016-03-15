@@ -291,7 +291,7 @@ class TestCompiler(ParseMixin, TestCase):
 
     def testIfSomeExpression(self):
         expr = ("[(builtins.inc(x) if (x is not None) else None) "
-                "for x in [ctx.result['foo']['bar']]][0]")
+                "for (x,) in [(ctx.result['foo']['bar'],)]][0]")
         self.assertCompiles(
             """
             div :class (if-some [x foo.bar] (inc x))
@@ -303,6 +303,78 @@ class TestCompiler(ParseMixin, TestCase):
             """.format(expr),
             {'foo': Record[{'bar': Option[IntType]}],
              'inc': Func[[IntType], IntType]},
+        )
+
+    def testIfSomeElseStatement(self):
+        self.assertCompiles(
+            """
+            if-some [x foo.bar] (h1 x) (h2 x)
+            """,
+            """
+            x = ctx.result['foo']['bar']
+            if (x is not None):
+                ctx.buffer.write('<h1>')
+                ctx.buffer.write(x)
+                ctx.buffer.write('</h1>')
+            else:
+                ctx.buffer.write('<h2>')
+                ctx.buffer.write(x)
+                ctx.buffer.write('</h2>')
+            """,
+            {'foo': Record[{'bar': Option[IntType]}]},
+        )
+
+    def testIfSomeElseExpression(self):
+        expr = ("[(builtins.inc(x) if (x is not None) else builtins.dec(x)) "
+                "for (x,) in [(ctx.result['foo']['bar'],)]][0]")
+        self.assertCompiles(
+            """
+            div :class (if-some [x foo.bar] (inc x) (dec x))
+            """,
+            """
+            ctx.buffer.write('<div class="')
+            ctx.buffer.write({})
+            ctx.buffer.write('"></div>')
+            """.format(expr),
+            {'foo': Record[{'bar': Option[IntType]}],
+             'inc': Func[[IntType], IntType],
+             'dec': Func[[IntType], IntType]},
+        )
+
+    def testIfSomeNamedElseStatement(self):
+        self.assertCompiles(
+            """
+            if-some [x foo.bar] :then (h1 x) :else (h2 x)
+            """,
+            """
+            x = ctx.result['foo']['bar']
+            if (x is not None):
+                ctx.buffer.write('<h1>')
+                ctx.buffer.write(x)
+                ctx.buffer.write('</h1>')
+            else:
+                ctx.buffer.write('<h2>')
+                ctx.buffer.write(x)
+                ctx.buffer.write('</h2>')
+            """,
+            {'foo': Record[{'bar': Option[IntType]}]},
+        )
+
+    def testIfSomeNamedElseExpression(self):
+        expr = ("[(builtins.inc(x) if (x is not None) else builtins.dec(x)) "
+                "for (x,) in [(ctx.result['foo']['bar'],)]][0]")
+        self.assertCompiles(
+            """
+            div :class (if-some [x foo.bar] :then (inc x) :else (dec x))
+            """,
+            """
+            ctx.buffer.write('<div class="')
+            ctx.buffer.write({})
+            ctx.buffer.write('"></div>')
+            """.format(expr),
+            {'foo': Record[{'bar': Option[IntType]}],
+             'inc': Func[[IntType], IntType],
+             'dec': Func[[IntType], IntType]},
         )
 
     def testGet(self):
