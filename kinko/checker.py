@@ -365,7 +365,7 @@ __var = VarsGen()
 
 LET_TYPE = Func[[__var.bindings, __var.expr], __var.result]
 
-DEF_TYPE = Func[[__var.name, VarArgs[__var.body]], __var.result]
+DEF_TYPE = Func[[__var.name, __var.body], __var.result]
 
 GET_TYPE = Func[[Record[{}], __var.key], __var.result]
 
@@ -376,7 +376,7 @@ IF3_TYPE = Func[[BoolType, NamedArg['then', __var.then_],
                 __var.result]
 
 
-EACH_TYPE = Func[[__var.symbol, ListType[__var.item], VarArgs[_MarkupLike]],
+EACH_TYPE = Func[[__var.symbol, ListType[__var.item], _MarkupLike],
                  Markup]
 
 IF_SOME1_TYPE = Func[[__var.bind, __var.then_], __var.result]
@@ -432,13 +432,13 @@ def check_let(fn_type, env, bindings, expr):
 def check_def(fn_type, env, sym, body):
     assert isinstance(sym, Symbol), repr(sym)
     visitor = _PlaceholdersExtractor()
-    [visitor.visit(n) for n in body]
+    visitor.visit(body)
     kw_arg_names = visitor.placeholders
     def_vars = {name: arg_var(name) for name in kw_arg_names}
     with env.push(def_vars):
-        body = [check(item, env) for item in body]
+        body = check(body, env)
     args = [NamedArg[name, def_vars[name]] for name in kw_arg_names]
-    unify(fn_type.__result__, Func[args, body[-1].__type__])
+    unify(fn_type.__result__, Func[args, body.__type__])
     fn_type = _FreshVars().visit(fn_type)
     # register new definition type in env
     env.define(sym.name, fn_type.__result__)
@@ -476,7 +476,7 @@ def check_each(fn_type, env, var, col, body):
     unify(col.__type__, ListType[var_type])
     var = Symbol.typed(var_type, var.name)
     with env.push({var.name: var_type}):
-        body = [check(item, env) for item in body]
+        body = check(body, env)
     return var, col, body
 
 

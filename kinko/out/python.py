@@ -282,7 +282,7 @@ def compile_def_stmt(env, node, name_sym, body):
             py_args.extend(py.arg(env[arg]) for arg in arg_names)
             yield py.FunctionDef(name_sym.name,
                                  py.arguments(py_args, None, None, []),
-                                 list(compile_stmts(env, body)), [])
+                                 list(compile_stmt(env, body)), [])
 
 
 def compile_let_stmt(env, node, bindings, expr):
@@ -351,7 +351,7 @@ def compile_if_some2_stmt(env, node, bind, then_, else_):
 def compile_each_stmt(env, node, var, col, body):
     with env.push([var.name]):
         yield py.For(py.Name(env[var.name], py.Store()), compile_expr(env, col),
-                     list(compile_stmts(env, body)), [])
+                     list(compile_stmt(env, body)), [])
 
 
 def compile_join1_stmt(env, node, col):

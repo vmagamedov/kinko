@@ -125,7 +125,7 @@ def compile_def_stmt(env, node, name_sym, body):
     with env.push(args):
         yield js.FuncDecl(js.Identifier(name_sym.name),
                           [js.Identifier(env[arg]) for arg in args],
-                          list(compile_stmts(env, body)))
+                          list(compile_stmt(env, body)))
 
 
 def compile_html_tag_stmt(env, node, attrs, body):
@@ -177,7 +177,7 @@ def compile_each_stmt(env, node, var, col, body):
                          js.DotAccessor(col_expr,
                                         js.Identifier('length'))),
                 js.UnaryOp('++', i_expr, postfix=True),
-                js.Block([var_stmt] + list(compile_stmts(env, body))),
+                js.Block([var_stmt] + list(compile_stmt(env, body))),
             )
 
 
