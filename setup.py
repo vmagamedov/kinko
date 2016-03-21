@@ -9,7 +9,7 @@ setup(
     url='https://github.com/vmagamedov/kinko',
     packages=find_packages(),
     license='BSD',
-    install_requires=['funcparserlib', 'astor'],
+    install_requires=['funcparserlib', 'astor', 'markupsafe'],
     extras_require={
         'js': ['slimit'],
         'cli': ['click'],

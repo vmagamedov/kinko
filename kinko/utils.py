@@ -2,6 +2,8 @@ import io
 from contextlib import contextmanager
 from collections import Counter
 
+from markupsafe import escape
+
 from .nodes import Keyword
 from .types import TypeVar
 from .compat import text_type
@@ -14,6 +16,9 @@ class Buffer(object):
 
     def write(self, s):
         self.stack[-1].write(text_type(s))
+
+    def write_unsafe(self, s):
+        self.stack[-1].write(escape(s))
 
     def push(self):
         self.stack.append(io.StringIO())

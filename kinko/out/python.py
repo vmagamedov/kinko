@@ -6,7 +6,8 @@ from ast import fix_missing_locations
 import astor
 
 from .. import compat_ast as py
-from ..types import NamedArgMeta, VarArgsMeta, VarNamedArgsMeta
+from ..types import NamedArgMeta, VarArgsMeta, VarNamedArgsMeta, UnionMeta
+from ..types import StringTypeMeta
 from ..nodes import String, Tuple, Symbol, List, Number, Placeholder
 from ..nodes import NodeVisitor
 from ..utils import Environ
@@ -18,9 +19,22 @@ from ..checker import IF_SOME1_TYPE, IF_SOME2_TYPE, IF_SOME3_TYPE, LET_TYPE
 from ..constant import SELF_CLOSING_ELEMENTS
 
 
-def _write(value):
+def _contains_string(type_):
+    def recur_check(t):
+        if isinstance(t, UnionMeta):
+            return any(recur_check(st) for st in t.__types__)
+        else:
+            return isinstance(t, StringTypeMeta)
+    return recur_check(type_)
+
+
+def _write(value, node=None):
+    safe = isinstance(value, py.Str)
+    if not safe and node is not None:
+        safe = not _contains_string(get_type(node))
+    write_method = 'write' if safe else 'write_unsafe'
     buffer = py.Attribute(py.Name('ctx', py.Load()), 'buffer', py.Load())
-    return py.Expr(py.Call(py.Attribute(buffer, 'write', py.Load()),
+    return py.Expr(py.Call(py.Attribute(buffer, write_method, py.Load()),
                            [value], [], None, None))
 
 
@@ -50,7 +64,7 @@ def _yield_writes(env, node):
         for item in compile_stmt(env, node):
             yield item
     else:
-        yield _write(compile_expr(env, node))
+        yield _write(compile_expr(env, node), node)
 
 
 class _PlaceholdersExtractor(NodeVisitor):
@@ -300,7 +314,7 @@ def compile_html_tag_stmt(env, node, attrs, body):
     yield _write_str('<{}'.format(tag_name))
     for key, value in attrs.items():
         yield _write_str(' {}="'.format(key))
-        yield _write(compile_expr(env, value))
+        yield _write(compile_expr(env, value), value)
         yield _write_str('"')
     if tag_name in SELF_CLOSING_ELEMENTS:
         yield _write_str('/>')
@@ -362,7 +376,8 @@ def compile_join1_stmt(env, node, col):
 
 def compile_get_stmt(env, node, obj, attr):
     obj_expr = compile_expr(env, obj)
-    yield _write(py.Subscript(obj_expr, py.Index(py.Str(attr.name)), py.Load()))
+    yield _write(py.Subscript(obj_expr, py.Index(py.Str(attr.name)),
+                              py.Load()), node)
 
 
 STMT_TYPES = {
@@ -454,12 +469,12 @@ def compile_stmt(env, node):
 
     elif isinstance(node, Symbol):
         if node.name in env:
-            yield _write(py.Name(env[node.name], py.Load()))
+            yield _write(py.Name(env[node.name], py.Load()), node)
         else:
-            yield _write(_result_get(node.name))
+            yield _write(_result_get(node.name), node)
 
     elif isinstance(node, Placeholder):
-        yield _write(py.Name(env[node.name], py.Load()))
+        yield _write(py.Name(env[node.name], py.Load()), node)
 
     elif isinstance(node, String):
         yield _write(py.Str(node.value))

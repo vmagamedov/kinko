@@ -58,7 +58,7 @@ class TestCompiler(ParseMixin, TestCase):
             """,
             """
             ctx.buffer.write('<div foo="bar">')
-            ctx.buffer.write(ctx.result['baz'])
+            ctx.buffer.write_unsafe(ctx.result['baz'])
             ctx.buffer.write('</div>')
             """,
             {'baz': StringType},
@@ -83,7 +83,7 @@ class TestCompiler(ParseMixin, TestCase):
             """,
             """
             ctx.buffer.write('<div class="')
-            ctx.buffer.write('SEP'.join(({}(_i) for _i in [1, 2, 3])))
+            ctx.buffer.write_unsafe('SEP'.join(({}(_i) for _i in [1, 2, 3])))
             ctx.buffer.write('"></div>')
             """.format(text_type_name),
         )
@@ -99,7 +99,7 @@ class TestCompiler(ParseMixin, TestCase):
             ctx.buffer.write('<div>')
             for i in ctx.result['items']:
                 ctx.buffer.write('<div>')
-                ctx.buffer.write(i)
+                ctx.buffer.write_unsafe(i)
                 ctx.buffer.write('</div>')
             ctx.buffer.write('</div>')
             """,
@@ -113,7 +113,7 @@ class TestCompiler(ParseMixin, TestCase):
             """,
             """
             ctx.buffer.write('<a href="')
-            ctx.buffer.write(builtins.url-for('foo', bar='baz'))
+            ctx.buffer.write_unsafe(builtins.url-for('foo', bar='baz'))
             ctx.buffer.write('"></a>')
             """,
             {'url-for': Func[[StringType, VarNamedArgs[StringType]],
@@ -133,13 +133,13 @@ class TestCompiler(ParseMixin, TestCase):
             """
             def func(ctx, foo, bar, baz):
                 ctx.buffer.write('<div class="')
-                ctx.buffer.write(foo)
+                ctx.buffer.write_unsafe(foo)
                 ctx.buffer.write('">')
-                ctx.buffer.write(bar)
+                ctx.buffer.write_unsafe(bar)
                 ctx.buffer.write('</div>')
                 for i in ctx.result['items']:
                     ctx.buffer.write('<div>')
-                    ctx.buffer.write(baz)
+                    ctx.buffer.write_unsafe(baz)
                     ctx.buffer.write('</div>')
             """,
             {'items': ListType[Record[{}]]},
@@ -217,7 +217,7 @@ class TestCompiler(ParseMixin, TestCase):
             """,
             """
             ctx.buffer.write('<div class="')
-            ctx.buffer.write(('a' if 1 else None))
+            ctx.buffer.write_unsafe(('a' if 1 else None))
             ctx.buffer.write('"></div>')
             """,
         )
@@ -242,7 +242,7 @@ class TestCompiler(ParseMixin, TestCase):
             """,
             """
             ctx.buffer.write('<div class="')
-            ctx.buffer.write(('a' if 1 else 'b'))
+            ctx.buffer.write_unsafe(('a' if 1 else 'b'))
             ctx.buffer.write('"></div>')
             """,
         )
@@ -267,7 +267,7 @@ class TestCompiler(ParseMixin, TestCase):
             """,
             """
             ctx.buffer.write('<div class="')
-            ctx.buffer.write(('a' if 1 else 'b'))
+            ctx.buffer.write_unsafe(('a' if 1 else 'b'))
             ctx.buffer.write('"></div>')
             """,
         )
@@ -384,7 +384,7 @@ class TestCompiler(ParseMixin, TestCase):
             """,
             """
             ctx.buffer.write('<div class="')
-            ctx.buffer.write(ctx.result['foo']['bar']['baz'])
+            ctx.buffer.write_unsafe(ctx.result['foo']['bar']['baz'])
             ctx.buffer.write('"></div>')
             """,
             {'foo': Record[{'bar': Record[{'baz': StringType}]}]},
