@@ -10,7 +10,8 @@ from .base import TestCase
 A_SRC = """\
 def foo
   b/bar
-    :arg value
+    :arg
+      span value
 """
 
 B_SRC = """\
@@ -50,12 +51,13 @@ class TestLoadCode(TestCase):
     def testRender(self):
         fn = self.lookup.get('a/foo')
         content = fn.render({'value': 'test'})
-        self.assertEqual(content, '<div>test</div>')
+        self.assertEqual(content, '<div><span>test</span></div>')
 
     def testEscape(self):
         fn = self.lookup.get('a/foo')
         content = fn.render({
             'value': '<script>alert("xss");</script>',
         })
-        self.assertEqual(content, ('<div>&lt;script&gt;alert(&#34;xss&#34;);'
-                                   '&lt;/script&gt;</div>'))
+        self.assertEqual(content,
+                         ('<div><span>&lt;script&gt;alert(&#34;xss&#34;);'
+                          '&lt;/script&gt;</span></div>'))

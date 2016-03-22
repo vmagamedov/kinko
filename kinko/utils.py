@@ -2,7 +2,7 @@ import io
 from contextlib import contextmanager
 from collections import Counter
 
-from markupsafe import escape
+from markupsafe import Markup, escape
 
 from .nodes import Keyword
 from .types import TypeVar
@@ -24,7 +24,7 @@ class Buffer(object):
         self.stack.append(io.StringIO())
 
     def pop(self):
-        return self.stack.pop().getvalue()
+        return Markup(self.stack.pop().getvalue())
 
 
 class VarsGen(object):
