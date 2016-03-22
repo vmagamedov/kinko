@@ -2,6 +2,7 @@ from collections import namedtuple
 
 from .refs import extract
 from .nodes import NodeVisitor
+from .sugar import StringInterpolate
 from .utils import Buffer
 from .parser import parser
 from .compat import _exec_in
@@ -94,6 +95,7 @@ class Lookup(object):
             _visited.add(name)
             source = self._loader.load(name)
             node = self._parser.parse(list(tokenize(source.content)))
+            node = StringInterpolate().visit(node)
             node = NamesResolver(source.name).visit(node)
             dependencies = DependenciesVisitor.get_dependencies(node)
             yield ParsedSource(name, source.modified_time, node, dependencies)
