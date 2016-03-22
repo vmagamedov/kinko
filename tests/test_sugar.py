@@ -1,16 +1,19 @@
 from kinko.nodes import Tuple, Symbol, List, String
-from kinko.sugar import translate, StringInterpolate
+from kinko.sugar import InterpolateString
 
 from .base import TestCase, NODE_EQ_PATCHER
 from .test_parser import ParseMixin
 
 
-class TestInterpolation(ParseMixin, TestCase):
+class TestInterpolateString(ParseMixin, TestCase):
     ctx = [NODE_EQ_PATCHER]
 
-    def testTranslate(self):
+    def interpolate(self, node):
+        return InterpolateString().visit(node)
+
+    def testInterpolate(self):
         self.assertEqual(
-            translate(String('before {a} {b.c} after')),
+            self.interpolate(String('before {a} {b.c} after')),
             Tuple([Symbol('join'), List([
                 String('before '),
                 Symbol('a'),
@@ -20,7 +23,7 @@ class TestInterpolation(ParseMixin, TestCase):
             ])]),
         )
         self.assertEqual(
-            translate(String('before {a-b} {b-c.d-e} after')),
+            self.interpolate(String('before {a-b} {b-c.d-e} after')),
             Tuple([Symbol('join'), List([
                 String('before '),
                 Symbol('a-b'),
@@ -30,13 +33,14 @@ class TestInterpolation(ParseMixin, TestCase):
             ])]),
         )
 
-    def testTranslateInvalid(self):
+    def testInterpolateInvalid(self):
         self.assertEqual(
-            translate(String('before {.a} {b.} {a..b} {.} {..} after')),
+            self.interpolate(String('before {.a} {b.} {a..b} {.} {..} after')),
             String('before {.a} {b.} {a..b} {.} {..} after'),
         )
         self.assertEqual(
-            translate(String('before {.a} {b.} {c} {a..b} {.} {..} after')),
+            self.interpolate(String('before {.a} {b.} {c} {a..b} {.} {..} '
+                                    'after')),
             Tuple([Symbol('join'), List([
                 String('before {.a} {b.} '),
                 Symbol('c'),
@@ -44,14 +48,13 @@ class TestInterpolation(ParseMixin, TestCase):
             ])]),
         )
 
-    def testStringInterpolate(self):
+    def testParser(self):
         node = self.parse("""
         foo
           "bar {value} baz"
         """)
-        node = StringInterpolate().visit(node)
         self.assertEqual(
-            StringInterpolate().visit(node),
+            node,
             List([
                 Tuple([
                     Symbol('foo'),

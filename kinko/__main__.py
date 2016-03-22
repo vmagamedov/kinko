@@ -52,13 +52,13 @@ def cli(ctx, verbose, debug):
                 default='-')
 @click.pass_context
 def compile_(ctx, type_, source, output):
-    from .parser import parser
+    from .parser import parse
     from .checker import check, Environ
     from .tokenizer import tokenize
 
     try:
         tokens = list(tokenize(source.read()))
-        node = parser().parse(tokens)
+        node = parse(tokens)
     except Exception:
         # TODO: print pretty parsing error
         click.echo('Failed to parse source file.', err=True)

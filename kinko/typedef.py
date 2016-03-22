@@ -3,7 +3,7 @@ import weakref
 from . import types
 from .utils import split_args
 from .nodes import NodeTransformer, Symbol
-from .parser import parser
+from .parser import parse
 from .tokenizer import tokenize
 
 
@@ -90,7 +90,7 @@ class BindReferences(types.TypeVisitor):
 
 def load_types(src):
     tokens = list(tokenize(src))
-    node = parser().parse(tokens)
+    node = parse(tokens)
     types_constructor = TypesConstructor()
     types_constructor.visit(node)
     defs = types_constructor.get_types()

@@ -2,9 +2,8 @@ from collections import namedtuple
 
 from .refs import extract
 from .nodes import NodeVisitor
-from .sugar import StringInterpolate
 from .utils import Buffer
-from .parser import parser
+from .parser import parse
 from .compat import _exec_in
 from .checker import def_types, split_defs, Environ, check, collect_defs
 from .checker import NamesResolver, NamesUnResolver
@@ -77,7 +76,6 @@ class Lookup(object):
         self._cache = cache or DictCache()
         self._namespaces = {}
         self._reqs = {}
-        self._parser = parser()
 
     def _get_dependencies(self, ns, _visited=None):
         _visited = set([]) if _visited is None else _visited
@@ -94,8 +92,7 @@ class Lookup(object):
         if name not in _visited:
             _visited.add(name)
             source = self._loader.load(name)
-            node = self._parser.parse(list(tokenize(source.content)))
-            node = StringInterpolate().visit(node)
+            node = parse(list(tokenize(source.content)))
             node = NamesResolver(source.name).visit(node)
             dependencies = DependenciesVisitor.get_dependencies(node)
             yield ParsedSource(name, source.modified_time, node, dependencies)

@@ -1,18 +1,14 @@
 from __future__ import absolute_import
 
 from ast import literal_eval
-from functools import partial
 from itertools import chain
-try:
-    from functools import reduce
-except ImportError:
-    pass
 
 from funcparserlib.parser import forward_decl, maybe, some, oneplus
 from funcparserlib.parser import skip, many
 
 from .nodes import Symbol, String, Placeholder, Keyword, Number, List
 from .nodes import Dict, Tuple
+from .sugar import InterpolateString, TranslateDots
 from .tokenizer import Token, Location, Position
 
 
@@ -30,22 +26,6 @@ def _gen(node_cls, coerce_=None):
         def proc(token):
             return node_cls(coerce_(token.value), location=token.location)
     return proc
-
-
-def _dotted(node_cls):
-    def gen(token):
-        # TODO: validate token value
-        sym = partial(Symbol, location=token.location)
-        head, sep, tail = token.value.partition('/')
-        if sep:
-            parts = tail.split('.')
-            path = [head + sep + parts[0]] + parts[1:]
-        else:
-            path = head.split('.')
-        return reduce(lambda value, attr: Tuple([sym('get'), value, sym(attr)],
-                                                location=token.location),
-                      path[1:], node_cls(path[0], location=token.location))
-    return gen
 
 
 def _list(open_br, values):
@@ -85,9 +65,9 @@ def parser():
     def delim(t):
         return skip(_tok(t))
 
-    symbol = _tok(Token.SYMBOL) >> _dotted(Symbol)
+    symbol = _tok(Token.SYMBOL) >> _gen(Symbol)
     string = _tok(Token.STRING) >> _gen(String)
-    placeholder = _tok(Token.PLACEHOLDER) >> _dotted(Placeholder)
+    placeholder = _tok(Token.PLACEHOLDER) >> _gen(Placeholder)
     keyword = _tok(Token.KEYWORD) >> _gen(Keyword)
 
     # Note: tokenizer guarantee that value consists of dots and digits
@@ -148,3 +128,10 @@ def parser():
         apl(_module)
     )
     return body
+
+
+def parse(tokens):
+    node = parser().parse(tokens)
+    node = InterpolateString().visit(node)
+    node = TranslateDots().visit(node)
+    return node

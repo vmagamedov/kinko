@@ -2,7 +2,7 @@ from funcparserlib.parser import NoParseError
 
 from kinko.nodes import Symbol, Tuple, String, Number, Keyword, Dict, List
 from kinko.nodes import Placeholder, NodeVisitor
-from kinko.parser import parser
+from kinko.parser import parse
 
 from .base import TestCase, NODE_EQ_PATCHER
 from .test_tokenizer import TokenizeMixin
@@ -20,7 +20,7 @@ class ParseMixin(TokenizeMixin):
     def parse(self, src):
         tokens = list(self.tokenize(src))
         try:
-            node = parser().parse(tokens)
+            node = parse(tokens)
         except NoParseError:
             print(tokens)
             raise
