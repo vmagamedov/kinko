@@ -1,14 +1,15 @@
 from textwrap import dedent
 from unittest import TestCase
 
-from kinko.tokenizer import Token, tokenize
+from kinko.errors import Errors
+from kinko.tokenizer import Token, tokenize, TokenizerError
 
 
 class TokenizeMixin(object):
 
-    def tokenize(self, src):
+    def tokenize(self, src, errors=None):
         src = dedent(src).strip() + '\n'
-        return tokenize(src)
+        return tokenize(src, errors)
 
 
 class TestTokenizer(TokenizeMixin, TestCase):
@@ -17,6 +18,16 @@ class TestTokenizer(TokenizeMixin, TestCase):
     def assertTokens(self, string, tokens):
         left = [(kind, value) for (kind, value, loc) in self.tokenize(string)]
         self.assertEqual(left, tokens)
+
+    def assertErrors(self, string, messages):
+        errors = Errors()
+        try:
+            list(self.tokenize(string, errors))
+        except TokenizerError:
+            errors_map = {e.message for e in errors.list}
+            self.assertEqual(errors_map, set(messages))
+        else:
+            self.fail('No errors')
 
     def testSymbol(self):
         self.assertTokens(
@@ -144,6 +155,25 @@ class TestTokenizer(TokenizeMixin, TestCase):
                 (Token.DEDENT, ''),
                 (Token.EOF, ''),
             ]
+        )
+
+    def testIndentWithTabs(self):
+        self.assertErrors(
+            """
+            a
+            \tb
+            """,
+            ['Please indent by spaces'],
+        )
+
+    def testInvalidDedent(self):
+        self.assertErrors(
+            """
+            a
+              b
+             c
+            """,
+            ['Indentation level mismatch'],
         )
 
     def testComments(self):

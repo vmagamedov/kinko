@@ -6,6 +6,8 @@ except ImportError:
 from string import ascii_letters, digits, whitespace
 from collections import namedtuple
 
+from .errors import UserError, Errors
+
 
 MINUS = '-'
 SLASH = '/'
@@ -60,13 +62,8 @@ MATCHING_BRACKET = {
 }
 
 
-class TokenizerError(Exception):
-    def __init__(self, location, message):
-        self.location = location
-        self.message = message
-
-    def __str__(self):
-        return "{}: Tokenizer error {}".format(self.location, self.message)
+class TokenizerError(UserError):
+    pass
 
 
 class _Interrupt(Exception):
@@ -131,7 +128,7 @@ def read_slice(char_iter, valid_chars, type_, start=None):
                  Location(start, end))
 
 
-def read_string(char_iter, start, quote):
+def read_string(char_iter, start, quote, errors):
     start = start or char_iter.next_position
     for pos, ch in char_iter:
         if ch == '\'':
@@ -145,14 +142,15 @@ def read_string(char_iter, start, quote):
             return Token(Token.STRING, char_iter.string[quote_from: quote_to],
                          char_iter.location_from(start))
         elif ch == '\n':
-            raise TokenizerError(char_iter.location_from(start),
-                                 "Newlines are not allowed in strings")
+            with errors.location(char_iter.location_from(start)):
+                raise TokenizerError("Newlines are not allowed in strings")
 
-    raise TokenizerError(char_iter.location_from(start),
-                         "String does not and at EOF")
+    with errors.location(char_iter.location_from(start)):
+        raise TokenizerError("String does not and at EOF")
 
 
-def tokenize(string):
+def tokenize(string, errors=None):
+    errors = Errors() if errors is None else errors
     char_iter = Chars(string)
     brackets = []
     indents = [1]
@@ -164,10 +162,8 @@ def tokenize(string):
                     if ch != ' ':
                         if ch == '\n':
                             break
-                        raise TokenizerError(char_iter.location_from(start),
-                                             "Please indent by spaces. Forget "
-                                             "about that crappy {!r} characters"
-                                             .format(ch))
+                        with errors.location(char_iter.location_from(start)):
+                            raise TokenizerError("Please indent by spaces")
                     end = pos
                     try:
                         pos, ch = next(char_iter)
@@ -196,10 +192,9 @@ def tokenize(string):
                 if new_indent < cur_indent:
                     try:
                         ident_pos = indents.index(new_indent)
-                    except IndexError:
-                        raise TokenizerError(loc,
-                                             "Unindent doesn't match any "
-                                             "previous level of indentation")
+                    except ValueError:
+                        with errors.location(loc):
+                            raise TokenizerError("Indentation level mismatch")
                     else:
                         for _i in range(ident_pos+1, len(indents)):
                             yield Token(Token.DEDENT, '', loc)
@@ -224,7 +219,7 @@ def tokenize(string):
         elif ch in whitespace:
             continue
         elif ch == '"':
-            yield read_string(char_iter, pos, '"')
+            yield read_string(char_iter, pos, '"', errors)
         elif ch in ascii_letters or ch == DOT:
             yield read_slice(char_iter, SYMBOL_CHARS, Token.SYMBOL, pos)
         elif ch in digits:
@@ -236,17 +231,18 @@ def tokenize(string):
             if brackets:
                 bch, bpos = brackets.pop()
                 if MATCHING_BRACKET[bch] != ch:
-                    raise TokenizerError(char_iter.location_from(bpos),
-                                         "Unmatching parenthesis, expected "
-                                         "{!r} got {!r}"
-                                         .format(MATCHING_BRACKET[bch], ch))
+                    with errors.location(char_iter.location_from(bpos)):
+                        raise TokenizerError("Unmatching parenthesis, expected "
+                                             "{!r} got {!r}"
+                                             .format(MATCHING_BRACKET[bch], ch))
             else:
-                raise TokenizerError(char_iter.location_from(pos),
-                                     "No parenthesis matching {!r}".format(ch))
+                with errors.location(char_iter.location_from(pos)):
+                    raise TokenizerError("No parenthesis matching {!r}"
+                                         .format(ch))
             yield Token(BRACKET_TYPES[ch], ch, char_iter.location_from(pos))
         else:
-            raise TokenizerError(char_iter.location_from(pos),
-                                 "Wrong character {!r}".format(ch))
+            with errors.location(char_iter.location_from(pos)):
+                raise TokenizerError("Wrong character {!r}".format(ch))
     else:
         eof_pos = char_iter.location_from(char_iter.next_position)
         if char_iter.next_position.column != 1:
