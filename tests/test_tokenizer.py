@@ -5,6 +5,11 @@ from kinko.errors import Errors
 from kinko.tokenizer import Token, tokenize, TokenizerError
 
 
+NL = (Token.NEWLINE, '\n')
+
+EOF = (Token.EOF, '')
+
+
 class TokenizeMixin(object):
 
     def tokenize(self, src, errors=None):
@@ -40,9 +45,8 @@ class TestTokenizer(TokenizeMixin, TestCase):
                 (Token.SYMBOL, 'foo/bar'),
                 (Token.SYMBOL, './foo'),
                 (Token.SYMBOL, 'foo_bar'),
-                (Token.SYMBOL, 'Foo'),
-                (Token.NEWLINE, '\n'),
-                (Token.EOF, ''),
+                (Token.SYMBOL, 'Foo'), NL,
+                EOF,
             ],
         )
 
@@ -62,9 +66,8 @@ class TestTokenizer(TokenizeMixin, TestCase):
                 (Token.STRING, '{}'),
                 (Token.STRING, '[]'),
                 (Token.STRING, '()'),
-                (Token.STRING, '123'),
-                (Token.NEWLINE, '\n'),
-                (Token.EOF, ''),
+                (Token.STRING, '123'), NL,
+                EOF,
             ],
         )
 
@@ -77,9 +80,8 @@ class TestTokenizer(TokenizeMixin, TestCase):
                 (Token.NUMBER, '4.5d'),
                 (Token.NUMBER, '6d.7'),
                 (Token.NUMBER, '8d'),
-                (Token.NUMBER, '9...'),
-                (Token.NEWLINE, '\n'),
-                (Token.EOF, ''),
+                (Token.NUMBER, '9...'), NL,
+                EOF,
             ],
         )
 
@@ -89,9 +91,8 @@ class TestTokenizer(TokenizeMixin, TestCase):
             [
                 (Token.KEYWORD, 'foo'),
                 (Token.KEYWORD, 'foo-bar'),
-                (Token.KEYWORD, 'foo_bar'),
-                (Token.NEWLINE, '\n'),
-                (Token.EOF, ''),
+                (Token.KEYWORD, 'foo_bar'), NL,
+                EOF,
             ],
         )
 
@@ -102,9 +103,8 @@ class TestTokenizer(TokenizeMixin, TestCase):
                 (Token.PLACEHOLDER, 'foo'),
                 (Token.PLACEHOLDER, 'foo-bar'),
                 (Token.PLACEHOLDER, 'foo_bar'),
-                (Token.PLACEHOLDER, 'foo.bar'),
-                (Token.NEWLINE, '\n'),
-                (Token.EOF, ''),
+                (Token.PLACEHOLDER, 'foo.bar'), NL,
+                EOF,
             ],
         )
 
@@ -124,11 +124,40 @@ class TestTokenizer(TokenizeMixin, TestCase):
                 (Token.STRING, 'text'),
                 (Token.CLOSE_BRACKET, ']'),
                 (Token.NUMBER, '1'),
-                (Token.CLOSE_PAREN, ')'),
-                (Token.NEWLINE, '\n'),
-                (Token.EOF, ''),
+                (Token.CLOSE_PAREN, ')'), NL,
+                EOF,
             ],
         )
+
+    def testIncompleteParentheses(self):
+        for bracket in '[({':
+            self.assertErrors(
+                """
+                foo {}bar
+                """.format(bracket),
+                ['Not closed parenthesis'],
+            )
+
+    def testInvalidParentheses(self):
+        params = [(a, b, c) for a, b in zip('[({', '])}')
+                  for c in '])}' if b != c]
+        for open_bracket, closing_bracket, invalid_bracket in params:
+            self.assertErrors(
+                """
+                foo {}bar{}
+                """.format(open_bracket, invalid_bracket),
+                ["Unmatching parenthesis, expected '{}' got '{}'"
+                 .format(closing_bracket, invalid_bracket)],
+            )
+
+    def testUnknownParentheses(self):
+        for bracket in '])}':
+            self.assertErrors(
+                """
+                foo bar{}
+                """.format(bracket),
+                ["No parenthesis matching '{}'".format(bracket)],
+            )
 
     def testIndent(self):
         self.assertTokens(
@@ -141,19 +170,19 @@ class TestTokenizer(TokenizeMixin, TestCase):
                 s112
             """,
             [
-                (Token.SYMBOL, 's1'), (Token.NEWLINE, '\n'),
+                (Token.SYMBOL, 's1'), NL,
                 (Token.INDENT, ''),
-                (Token.SYMBOL, 's11'), (Token.NEWLINE, '\n'),
+                (Token.SYMBOL, 's11'), NL,
                 (Token.INDENT, ''),
-                (Token.SYMBOL, 's111'), (Token.NEWLINE, '\n'),
+                (Token.SYMBOL, 's111'), NL,
                 (Token.DEDENT, ''),
-                (Token.SYMBOL, 's12'), (Token.NEWLINE, '\n'),
-                (Token.SYMBOL, 's13'), (Token.NEWLINE, '\n'),
+                (Token.SYMBOL, 's12'), NL,
+                (Token.SYMBOL, 's13'), NL,
                 (Token.INDENT, ''),
-                (Token.SYMBOL, 's112'), (Token.NEWLINE, '\n'),
+                (Token.SYMBOL, 's112'), NL,
                 (Token.DEDENT, ''),
                 (Token.DEDENT, ''),
-                (Token.EOF, ''),
+                EOF,
             ]
         )
 
@@ -187,12 +216,10 @@ class TestTokenizer(TokenizeMixin, TestCase):
               bar ; comment
             """,
             [
-                (Token.SYMBOL, 'foo'),
-                (Token.NEWLINE, '\n'),
+                (Token.SYMBOL, 'foo'), NL,
                 (Token.INDENT, ''),
-                (Token.SYMBOL, 'bar'),
-                (Token.NEWLINE, '\n'),
+                (Token.SYMBOL, 'bar'), NL,
                 (Token.DEDENT, ''),
-                (Token.EOF, ''),
+                EOF,
             ],
         )

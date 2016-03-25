@@ -248,6 +248,10 @@ def tokenize(string, errors=None):
         if char_iter.next_position.column != 1:
             yield Token(Token.NEWLINE, '\n', eof_pos)
     eof_pos = char_iter.location_from(char_iter.next_position)
+    if brackets:
+        bch, bpos = brackets[-1]
+        with errors.location(char_iter.location_from(bpos)):
+            raise TokenizerError("Not closed parenthesis")
     for i in range(1, len(indents)):
         yield Token(Token.DEDENT, '', eof_pos)
     yield Token(Token.EOF, '', eof_pos)
