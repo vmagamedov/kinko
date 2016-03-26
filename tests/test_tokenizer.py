@@ -13,7 +13,7 @@ EOF = (Token.EOF, '')
 
 
 def tokenize(src, errors=None):
-    src = dedent(src).strip() + '\n'
+    src = dedent(src).strip()
     return _tokenize(src, errors)
 
 
@@ -69,6 +69,13 @@ def test_string():
             (Token.STRING, '123'), NL,
             EOF,
         ],
+    )
+
+
+def test_incomplete_string():
+    check_errors(
+        '"foo',
+        ['String does not and at EOF'],
     )
 
 

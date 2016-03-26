@@ -210,8 +210,9 @@ def tokenize(string, errors=None):
         elif ch == ';':
             for pos, ch in char_iter:
                 if ch == '\n':
+                    yield Token(Token.NEWLINE, '\n',
+                                char_iter.location_from(pos))
                     break
-            yield Token(Token.NEWLINE, '\n', char_iter.location_from(pos))
         elif ch == '#':
             yield read_slice(char_iter, PLACEHOLDER_CHARS, Token.PLACEHOLDER)
         elif ch == '\n' and not brackets:
