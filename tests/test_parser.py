@@ -5,7 +5,7 @@ from kinko.nodes import Placeholder, NodeVisitor
 from kinko.parser import parse
 
 from .base import TestCase, NODE_EQ_PATCHER
-from .test_tokenizer import TokenizeMixin
+from .test_tokenizer import tokenize
 
 
 class LocationChecker(NodeVisitor):
@@ -15,10 +15,10 @@ class LocationChecker(NodeVisitor):
         super(LocationChecker, self).visit(node)
 
 
-class ParseMixin(TokenizeMixin):
+class ParseMixin(object):
 
     def parse(self, src):
-        tokens = list(self.tokenize(src))
+        tokens = list(tokenize(src))
         try:
             node = parse(tokens)
         except NoParseError:
