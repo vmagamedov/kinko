@@ -50,6 +50,13 @@ def test_symbol():
     )
 
 
+def test_invalid_character():
+    check_errors(
+        'foo $ bar',
+        ["Wrong character '$'"],
+    )
+
+
 def test_string():
     check_tokens(
         '"foo" "foo.bar" "foo-bar" "foo/bar" "foo_bar" "Foo" '
@@ -76,6 +83,13 @@ def test_incomplete_string():
     check_errors(
         '"foo',
         ['String does not and at EOF'],
+    )
+
+
+def test_string_with_newline():
+    check_errors(
+        '"foo\nbar"',
+        ['Newlines are not allowed in strings'],
     )
 
 
@@ -106,7 +120,7 @@ def test_keyword():
     )
 
 
-def test_laceholder():
+def test_placeholder():
     check_tokens(
         '#foo #foo-bar #foo_bar #foo.bar',
         [
