@@ -1,4 +1,5 @@
 from textwrap import dedent
+from collections import namedtuple
 
 import pytest
 
@@ -27,8 +28,12 @@ def check_errors(string, messages):
     try:
         list(tokenize(string, errors))
     except TokenizerError:
-        errors_map = {e.message for e in errors.list}
-        assert errors_map == set(messages)
+        errors_set = {
+            (e.message, e.location.start.offset, e.location.end.offset)
+            for e in errors.list
+        }
+        for error in messages:
+            assert error in errors_set
     else:
         raise AssertionError('No errors')
 
@@ -47,13 +52,6 @@ def test_symbol():
             (Token.SYMBOL, 'Foo'), NL,
             EOF,
         ],
-    )
-
-
-def test_invalid_character():
-    check_errors(
-        'foo $ bar',
-        ["Wrong character '$'"],
     )
 
 
@@ -76,20 +74,6 @@ def test_string():
             (Token.STRING, '123'), NL,
             EOF,
         ],
-    )
-
-
-def test_incomplete_string():
-    check_errors(
-        '"foo',
-        ['String does not and at EOF'],
-    )
-
-
-def test_string_with_newline():
-    check_errors(
-        '"foo\nbar"',
-        ['Newlines are not allowed in strings'],
     )
 
 
@@ -155,40 +139,6 @@ def test_brackets():
     )
 
 
-@pytest.mark.parametrize('bracket', '[({')
-def test_incomplete_parentheses(bracket):
-    check_errors(
-        """
-        foo {}bar
-        """.format(bracket),
-        ['Not closed parenthesis'],
-    )
-
-
-@pytest.mark.parametrize(
-    ['open_br', 'closing_br', 'invalid_br'],
-    [(a, b, c) for a, b in zip('[({', '])}') for c in '])}' if b != c]
-)
-def test_invalid_parentheses(open_br, closing_br, invalid_br):
-    check_errors(
-        """
-        foo {}bar{}
-        """.format(open_br, invalid_br),
-        ["Unmatching parenthesis, expected '{}' got '{}'"
-         .format(closing_br, invalid_br)],
-    )
-
-
-@pytest.mark.parametrize('bracket', '])}')
-def test_unknown_parentheses(bracket):
-    check_errors(
-        """
-        foo bar{}
-        """.format(bracket),
-        ["No parenthesis matching '{}'".format(bracket)],
-    )
-
-
 def test_indent():
     check_tokens(
         """
@@ -217,27 +167,6 @@ def test_indent():
     )
 
 
-def test_indent_with_tabs():
-    check_errors(
-        """
-        a
-        \tb
-        """,
-        ['Please indent by spaces'],
-    )
-
-
-def test_invalid_dedent():
-    check_errors(
-        """
-        a
-          b
-         c
-        """,
-        ['Indentation level mismatch'],
-    )
-
-
 def test_comments():
     check_tokens(
         """
@@ -256,3 +185,72 @@ def test_comments():
             EOF,
         ],
     )
+
+
+Msg = namedtuple('msg', 'text start end')
+
+
+def test_invalid_character_error():
+    src = 'foo ` bar'
+    msg = Msg("Wrong character '`'", 4, 5)
+    check_errors(src, [msg])
+    assert src[msg.start:msg.end] == '`'
+
+
+def test_incomplete_string():
+    src = '"foo'
+    msg = Msg('String does not and at EOF', 0, 4)
+    check_errors(src, [msg])
+    assert src[msg.start:msg.end] == '"foo'
+
+
+def test_string_with_newline():
+    src = '"foo\nbar"'
+    msg = Msg('Newlines are not allowed in strings', 0, 5)
+    check_errors(src, [msg])
+    assert src[msg.start:msg.end] == '"foo\n'
+
+
+@pytest.mark.parametrize('bracket', '[({')
+def test_incomplete_parentheses(bracket):
+    src = 'foo {}bar'.format(bracket)
+    msg = Msg('Not closed parenthesis', 4, 8)
+    check_errors(src, [msg])
+    assert src[msg.start:msg.end] == '{}bar'.format(bracket)
+
+
+@pytest.mark.parametrize(
+    ['open_br', 'closing_br', 'invalid_br'],
+    [(a, b, c) for a, b in zip('[({', '])}') for c in '])}' if b != c]
+)
+def test_invalid_parentheses(open_br, closing_br, invalid_br):
+    src = 'foo {}bar{}'.format(open_br, invalid_br)
+    msg = Msg(
+        "Unmatching parenthesis, expected '{}' got '{}'"
+        .format(closing_br, invalid_br),
+        4, 9,
+    )
+    check_errors(src, [msg])
+    assert src[msg.start:msg.end] == '{}bar{}'.format(open_br, invalid_br)
+
+
+@pytest.mark.parametrize('bracket', '])}')
+def test_unknown_parentheses(bracket):
+    src = 'foo bar{}'.format(bracket)
+    msg = Msg("No parenthesis matching '{}'".format(bracket), 7, 8)
+    check_errors(src, [msg])
+    assert src[msg.start:msg.end] == bracket
+
+
+def test_indent_with_tabs():
+    src = 'foo\n\tbar'
+    msg = Msg('Please indent by spaces', 4, 5)
+    check_errors(src, [msg])
+    assert src[msg.start:msg.end] == '\t'
+
+
+def test_invalid_dedent():
+    src = 'a\n  b\n    c\n   d\ne'
+    msg = Msg('Indentation level mismatch', 12, 15)
+    check_errors(src, [msg])
+    assert src[msg.start:msg.end + 1] == '   d'

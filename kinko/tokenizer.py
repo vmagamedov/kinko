@@ -157,14 +157,13 @@ def tokenize(string, errors=None):
     for pos, ch in char_iter:
         try:
             while pos.column == 1 and not brackets:
-                start = end = pos
+                start = pos
                 while ch in whitespace:
                     if ch != ' ':
                         if ch == '\n':
                             break
                         with errors.location(char_iter.location_from(start)):
                             raise TokenizerError("Please indent by spaces")
-                    end = pos
                     try:
                         pos, ch = next(char_iter)
                     except StopIteration:
@@ -188,7 +187,7 @@ def tokenize(string, errors=None):
                     continue
                 cur_indent = indents[-1]
                 new_indent = pos.column
-                loc = Location(start, end)
+                loc = Location(start, pos)
                 if new_indent < cur_indent:
                     try:
                         ident_pos = indents.index(new_indent)
@@ -217,7 +216,7 @@ def tokenize(string, errors=None):
             yield read_slice(char_iter, PLACEHOLDER_CHARS, Token.PLACEHOLDER)
         elif ch == '\n' and not brackets:
             yield Token(Token.NEWLINE, '\n', char_iter.location_from(pos))
-        elif ch in whitespace:
+        elif ch == ' ':
             continue
         elif ch == '"':
             yield read_string(char_iter, pos, '"', errors)
