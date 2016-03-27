@@ -10,7 +10,7 @@ from kinko.compat import _exec_in, PY3, text_type_name
 from kinko.lookup import SimpleContext
 from kinko.checker import check, Environ, NamesResolver, def_types
 from kinko.checker import NamesUnResolver, collect_defs, split_defs
-from kinko.out.python import compile_module, dumps
+from kinko.compile.python import compile_module, dumps
 
 from .base import TestCase
 from .test_parser import ParseMixin

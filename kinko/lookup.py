@@ -9,7 +9,7 @@ from .checker import def_types, split_defs, Environ, check, collect_defs
 from .checker import NamesResolver, NamesUnResolver
 from .loaders import DictCache
 from .tokenizer import tokenize
-from .out.python import compile_module
+from .compile.python import compile_module
 
 
 class DependenciesVisitor(NodeVisitor):

@@ -1,6 +1,6 @@
 from __future__ import unicode_literals
 
-from kinko.readers.simple import loads
+from kinko.read.simple import loads
 
 from .base import TestCase, ResultMixin
 
