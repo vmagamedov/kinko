@@ -119,13 +119,14 @@ class Chars(object):
         return Location(pos, self.next_position)
 
 
-def read_slice(char_iter, valid_chars, type_, start=None):
+def read_slice(char_iter, valid_chars, type_, start=None, start_pos=None):
     start = start or char_iter.next_position
+    start_pos = start_pos or start
     while char_iter.peek_in(valid_chars):
         next(char_iter)
     end = char_iter.next_position
     return Token(type_, char_iter.string[start:end],
-                 Location(start, end))
+                 Location(start_pos, end))
 
 
 def read_string(char_iter, start, quote, errors):
@@ -205,7 +206,8 @@ def tokenize(string, errors=None):
         except _Interrupt:
             break
         if ch == ':':
-            yield read_slice(char_iter, KEYWORD_CHARS, Token.KEYWORD)
+            yield read_slice(char_iter, KEYWORD_CHARS, Token.KEYWORD,
+                             start_pos=pos)
         elif ch == ';':
             for pos, ch in char_iter:
                 if ch == '\n':
@@ -213,7 +215,8 @@ def tokenize(string, errors=None):
                                 char_iter.location_from(pos))
                     break
         elif ch == '#':
-            yield read_slice(char_iter, PLACEHOLDER_CHARS, Token.PLACEHOLDER)
+            yield read_slice(char_iter, PLACEHOLDER_CHARS, Token.PLACEHOLDER,
+                             start_pos=pos)
         elif ch == '\n' and not brackets:
             yield Token(Token.NEWLINE, '\n', char_iter.location_from(pos))
         elif ch == ' ':

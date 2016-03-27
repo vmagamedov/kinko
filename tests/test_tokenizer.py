@@ -18,9 +18,16 @@ def tokenize(src, errors=None):
     return _tokenize(src, errors)
 
 
-def check_tokens(string, tokens):
-    left = [(kind, value) for (kind, value, loc) in tokenize(string)]
-    assert left == tokens
+def check_tokens(string, reference):
+    string = dedent(string).strip()
+    values = [
+        (kind, value, loc.start.offset, loc.end.offset,
+         string[loc.start.offset:loc.end.offset])
+        for kind, value, loc in tokenize(string)
+    ]
+    assert values == reference
+    last_pos = len(string)
+    assert values[-1][2:4] == (last_pos, last_pos)  # EOF
 
 
 def check_errors(string, messages):
@@ -42,15 +49,16 @@ def test_symbol():
     check_tokens(
         'a foo1 foo.bar foo-bar foo/bar ./foo foo_bar Foo',
         [
-            (Token.SYMBOL, 'a'),
-            (Token.SYMBOL, 'foo1'),
-            (Token.SYMBOL, 'foo.bar'),
-            (Token.SYMBOL, 'foo-bar'),
-            (Token.SYMBOL, 'foo/bar'),
-            (Token.SYMBOL, './foo'),
-            (Token.SYMBOL, 'foo_bar'),
-            (Token.SYMBOL, 'Foo'), NL,
-            EOF,
+            (Token.SYMBOL, 'a', 0, 1, 'a'),
+            (Token.SYMBOL, 'foo1', 2, 6, 'foo1'),
+            (Token.SYMBOL, 'foo.bar', 7, 14, 'foo.bar'),
+            (Token.SYMBOL, 'foo-bar', 15, 22, 'foo-bar'),
+            (Token.SYMBOL, 'foo/bar', 23, 30, 'foo/bar'),
+            (Token.SYMBOL, './foo', 31, 36, './foo'),
+            (Token.SYMBOL, 'foo_bar', 37, 44, 'foo_bar'),
+            (Token.SYMBOL, 'Foo', 45, 48, 'Foo'),
+            (Token.NEWLINE, '\n', 48, 48, ''),
+            (Token.EOF, '', 48, 48, ''),
         ],
     )
 
@@ -60,19 +68,20 @@ def test_string():
         '"foo" "foo.bar" "foo-bar" "foo/bar" "foo_bar" "Foo" '
         '":foo" "#foo" "{}" "[]" "()" "123"',
         [
-            (Token.STRING, 'foo'),
-            (Token.STRING, 'foo.bar'),
-            (Token.STRING, 'foo-bar'),
-            (Token.STRING, 'foo/bar'),
-            (Token.STRING, 'foo_bar'),
-            (Token.STRING, 'Foo'),
-            (Token.STRING, ':foo'),
-            (Token.STRING, '#foo'),
-            (Token.STRING, '{}'),
-            (Token.STRING, '[]'),
-            (Token.STRING, '()'),
-            (Token.STRING, '123'), NL,
-            EOF,
+            (Token.STRING, 'foo', 0, 5, '"foo"'),
+            (Token.STRING, 'foo.bar', 6, 15, '"foo.bar"'),
+            (Token.STRING, 'foo-bar', 16, 25, '"foo-bar"'),
+            (Token.STRING, 'foo/bar', 26, 35, '"foo/bar"'),
+            (Token.STRING, 'foo_bar', 36, 45, '"foo_bar"'),
+            (Token.STRING, 'Foo', 46, 51, '"Foo"'),
+            (Token.STRING, ':foo', 52, 58, '":foo"'),
+            (Token.STRING, '#foo', 59, 65, '"#foo"'),
+            (Token.STRING, '{}', 66, 70, '"{}"'),
+            (Token.STRING, '[]', 71, 75, '"[]"'),
+            (Token.STRING, '()', 76, 80, '"()"'),
+            (Token.STRING, '123', 81, 86, '"123"'),
+            (Token.NEWLINE, '\n', 86, 86, ''),
+            (Token.EOF, '', 86, 86, ''),
         ],
     )
 
@@ -81,13 +90,14 @@ def test_number():
     check_tokens(
         '1 2.3 4.5d 6d.7 8d 9...',
         [
-            (Token.NUMBER, '1'),
-            (Token.NUMBER, '2.3'),
-            (Token.NUMBER, '4.5d'),
-            (Token.NUMBER, '6d.7'),
-            (Token.NUMBER, '8d'),
-            (Token.NUMBER, '9...'), NL,
-            EOF,
+            (Token.NUMBER, '1', 0, 1, '1'),
+            (Token.NUMBER, '2.3', 2, 5, '2.3'),
+            (Token.NUMBER, '4.5d', 6, 10, '4.5d'),
+            (Token.NUMBER, '6d.7', 11, 15, '6d.7'),
+            (Token.NUMBER, '8d', 16, 18, '8d'),
+            (Token.NUMBER, '9...', 19, 23, '9...'),
+            (Token.NEWLINE, '\n', 23, 23, ''),
+            (Token.EOF, '', 23, 23, ''),
         ],
     )
 
@@ -96,10 +106,11 @@ def test_keyword():
     check_tokens(
         ':foo :foo-bar :foo_bar',
         [
-            (Token.KEYWORD, 'foo'),
-            (Token.KEYWORD, 'foo-bar'),
-            (Token.KEYWORD, 'foo_bar'), NL,
-            EOF,
+            (Token.KEYWORD, 'foo', 0, 4, ':foo'),
+            (Token.KEYWORD, 'foo-bar', 5, 13, ':foo-bar'),
+            (Token.KEYWORD, 'foo_bar', 14, 22, ':foo_bar'),
+            (Token.NEWLINE, '\n', 22, 22, ''),
+            (Token.EOF, '', 22, 22, ''),
         ],
     )
 
@@ -108,11 +119,12 @@ def test_placeholder():
     check_tokens(
         '#foo #foo-bar #foo_bar #foo.bar',
         [
-            (Token.PLACEHOLDER, 'foo'),
-            (Token.PLACEHOLDER, 'foo-bar'),
-            (Token.PLACEHOLDER, 'foo_bar'),
-            (Token.PLACEHOLDER, 'foo.bar'), NL,
-            EOF,
+            (Token.PLACEHOLDER, 'foo', 0, 4, '#foo'),
+            (Token.PLACEHOLDER, 'foo-bar', 5, 13, '#foo-bar'),
+            (Token.PLACEHOLDER, 'foo_bar', 14, 22, '#foo_bar'),
+            (Token.PLACEHOLDER, 'foo.bar', 23, 31, '#foo.bar'),
+            (Token.NEWLINE, '\n', 31, 31, ''),
+            (Token.EOF, '', 31, 31, ''),
         ],
     )
 
@@ -121,20 +133,21 @@ def test_brackets():
     check_tokens(
         'foo (bar [baz {:key "value"} "text"] 1)',
         [
-            (Token.SYMBOL, 'foo'),
-            (Token.OPEN_PAREN, '('),
-            (Token.SYMBOL, 'bar'),
-            (Token.OPEN_BRACKET, '['),
-            (Token.SYMBOL, 'baz'),
-            (Token.OPEN_BRACE, '{'),
-            (Token.KEYWORD, 'key'),
-            (Token.STRING, 'value'),
-            (Token.CLOSE_BRACE, '}'),
-            (Token.STRING, 'text'),
-            (Token.CLOSE_BRACKET, ']'),
-            (Token.NUMBER, '1'),
-            (Token.CLOSE_PAREN, ')'), NL,
-            EOF,
+            (Token.SYMBOL, 'foo', 0, 3, 'foo'),
+            (Token.OPEN_PAREN, '(', 4, 5, '('),
+            (Token.SYMBOL, 'bar', 5, 8, 'bar'),
+            (Token.OPEN_BRACKET, '[', 9, 10, '['),
+            (Token.SYMBOL, 'baz', 10, 13, 'baz'),
+            (Token.OPEN_BRACE, '{', 14, 15, '{'),
+            (Token.KEYWORD, 'key', 15, 19, ':key'),
+            (Token.STRING, 'value', 20, 27, '"value"'),
+            (Token.CLOSE_BRACE, '}', 27, 28, '}'),
+            (Token.STRING, 'text', 29, 35, '"text"'),
+            (Token.CLOSE_BRACKET, ']', 35, 36, ']'),
+            (Token.NUMBER, '1', 37, 38, '1'),
+            (Token.CLOSE_PAREN, ')', 38, 39, ')'),
+            (Token.NEWLINE, '\n', 39, 39, ''),
+            (Token.EOF, '', 39, 39, ''),
         ],
     )
 
@@ -150,19 +163,25 @@ def test_indent():
             s112
         """,
         [
-            (Token.SYMBOL, 's1'), NL,
-            (Token.INDENT, ''),
-            (Token.SYMBOL, 's11'), NL,
-            (Token.INDENT, ''),
-            (Token.SYMBOL, 's111'), NL,
-            (Token.DEDENT, ''),
-            (Token.SYMBOL, 's12'), NL,
-            (Token.SYMBOL, 's13'), NL,
-            (Token.INDENT, ''),
-            (Token.SYMBOL, 's112'), NL,
-            (Token.DEDENT, ''),
-            (Token.DEDENT, ''),
-            EOF,
+            (Token.SYMBOL, 's1', 0, 2, 's1'),
+            (Token.NEWLINE, '\n', 2, 3, '\n'),
+            (Token.INDENT, '', 3, 5, '  '),
+            (Token.SYMBOL, 's11', 5, 8, 's11'),
+            (Token.NEWLINE, '\n', 8, 9, '\n'),
+            (Token.INDENT, '', 9, 13, '    '),
+            (Token.SYMBOL, 's111', 13, 17, 's111'),
+            (Token.NEWLINE, '\n', 17, 18, '\n'),
+            (Token.DEDENT, '', 18, 20, '  '),
+            (Token.SYMBOL, 's12', 20, 23, 's12'),
+            (Token.NEWLINE, '\n', 23, 24, '\n'),
+            (Token.SYMBOL, 's13', 26, 29, 's13'),
+            (Token.NEWLINE, '\n', 29, 30, '\n'),
+            (Token.INDENT, '', 30, 34, '    '),
+            (Token.SYMBOL, 's112', 34, 38, 's112'),
+            (Token.NEWLINE, '\n', 38, 38, ''),
+            (Token.DEDENT, '', 38, 38, ''),
+            (Token.DEDENT, '', 38, 38, ''),
+            (Token.EOF, '', 38, 38, ''),
         ]
     )
 
@@ -178,11 +197,13 @@ def test_comments():
           bar ; comment
         """,
         [
-            (Token.SYMBOL, 'foo'), NL,
-            (Token.INDENT, ''),
-            (Token.SYMBOL, 'bar'), NL,
-            (Token.DEDENT, ''),
-            EOF,
+            (Token.SYMBOL, 'foo', 35, 38, 'foo'),
+            (Token.NEWLINE, '\n', 38, 39, '\n'),
+            (Token.INDENT, '', 39, 41, '  '),
+            (Token.SYMBOL, 'bar', 41, 44, 'bar'),
+            (Token.NEWLINE, '\n', 54, 54, ''),
+            (Token.DEDENT, '', 54, 54, ''),
+            (Token.EOF, '', 54, 54, ''),
         ],
     )
 
