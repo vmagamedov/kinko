@@ -11,14 +11,14 @@ from kinko.checker import match_fn, restore_args, HTML_TAG_TYPE, IF_SOME2_TYPE
 from kinko.checker import IF_SOME3_TYPE
 
 from .base import TestCase, NODE_EQ_PATCHER, TYPE_EQ_PATCHER
-from .test_parser import ParseMixin
+from .test_parser import parse
 
 
-class TestChecker(ParseMixin, TestCase):
+class TestChecker(TestCase):
     ctx = [NODE_EQ_PATCHER, TYPE_EQ_PATCHER]
 
     def parse_expr(self, src):
-        return self.parse(src).values[0]
+        return parse(src).values[0]
 
     def check(self, src, env=None):
         return check(self.parse_expr(src), Environ(env))
@@ -538,7 +538,7 @@ class TestChecker(ParseMixin, TestCase):
         )
 
     def testDependent(self):
-        node = self.parse("""
+        node = parse("""
         def foo
           ./bar :arg "value"
 

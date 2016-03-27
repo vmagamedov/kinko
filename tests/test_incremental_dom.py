@@ -8,13 +8,13 @@ from kinko.checker import check, Environ
 from kinko.compile.incremental_dom import compile_module, dumps
 
 from .base import TestCase
-from .test_parser import ParseMixin
+from .test_parser import parse
 
 
-class TestIncrementalDOM(ParseMixin, TestCase):
+class TestIncrementalDOM(TestCase):
 
     def assertCompiles(self, src, code, env=None):
-        node = self.parse(src)
+        node = parse(src)
         node = check(node, Environ(env or {}))
         mod = compile_module(node)
         first = dumps(mod).strip()

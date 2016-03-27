@@ -13,10 +13,10 @@ from kinko.checker import NamesUnResolver, collect_defs, split_defs
 from kinko.compile.python import compile_module, dumps
 
 from .base import TestCase
-from .test_parser import ParseMixin
+from .test_parser import parse
 
 
-class TestCompiler(ParseMixin, TestCase):
+class TestCompiler(TestCase):
 
     def compareSources(self, first, second):
         first = first.strip()
@@ -30,7 +30,7 @@ class TestCompiler(ParseMixin, TestCase):
             raise self.failureException(msg)
 
     def assertCompiles(self, src, code, env=None):
-        node = self.parse(src)
+        node = parse(src)
         node = check(node, Environ(env or {}))
         mod = compile_module(node)
         try:
@@ -403,7 +403,7 @@ class TestCompiler(ParseMixin, TestCase):
         )
 
     def testModule(self):
-        foo_node = self.parse("""
+        foo_node = parse("""
         def func1
           div
             ./func2
@@ -412,7 +412,7 @@ class TestCompiler(ParseMixin, TestCase):
           div
             bar/func3
         """)
-        bar_node = self.parse("""
+        bar_node = parse("""
         def func3
           div "Text"
         """)
@@ -458,7 +458,7 @@ class TestCompiler(ParseMixin, TestCase):
         )
 
     def testCompile(self):
-        node = self.parse("""
+        node = parse("""
         def foo
           div
             each i items

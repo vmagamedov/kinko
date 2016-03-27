@@ -2,10 +2,10 @@ from kinko.nodes import Tuple, Symbol, List, String
 from kinko.sugar import InterpolateString
 
 from .base import TestCase, NODE_EQ_PATCHER
-from .test_parser import ParseMixin
+from .test_parser import parse
 
 
-class TestInterpolateString(ParseMixin, TestCase):
+class TestInterpolateString(TestCase):
     ctx = [NODE_EQ_PATCHER]
 
     def interpolate(self, node):
@@ -49,7 +49,7 @@ class TestInterpolateString(ParseMixin, TestCase):
         )
 
     def testParser(self):
-        node = self.parse("""
+        node = parse("""
         foo
           "bar {value} baz"
         """)

@@ -6,18 +6,18 @@ from kinko.checker import check, Environ
 
 from .base import TestCase, REF_EQ_PATCHER, NODE_EQ_PATCHER, query_eq_patcher
 from .base import STRICT_TYPE_EQ_PATCHER
-from .test_parser import ParseMixin
+from .test_parser import parse
 
 
 def ctx_var(name):
     return FieldRef(None, name)
 
 
-class TestRefs(ParseMixin, TestCase):
+class TestRefs(TestCase):
     ctx = [NODE_EQ_PATCHER, STRICT_TYPE_EQ_PATCHER, REF_EQ_PATCHER]
 
     def getRefs(self, src, env=None):
-        node = check(self.parse(src), Environ(env))
+        node = check(parse(src), Environ(env))
         refs_collector = RefsCollector()
         refs_collector.visit(node)
         return node, refs_collector.refs
@@ -94,7 +94,7 @@ class TestRefs(ParseMixin, TestCase):
                          FieldRef(each_r.__type__, 'attr'))
 
     def testRequirements(self):
-        node = self.parse(u"""
+        node = parse(u"""
         def baz
           div #b.count
 
