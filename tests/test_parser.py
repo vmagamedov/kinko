@@ -1,6 +1,6 @@
 from kinko.nodes import Symbol, Tuple, String, Number, Keyword, Dict, List
 from kinko.nodes import Placeholder, NodeVisitor
-from kinko.parser import parse as _parse
+from kinko.parser import parser, parse as _parse
 
 from .base import NODE_EQ_PATCHER
 from .test_tokenizer import tokenize
@@ -19,10 +19,23 @@ def parse(src):
     return node
 
 
+def parse_raw(src):
+    node = parser().parse(list(tokenize(src)))
+    LocationChecker().visit(node)
+    return node
+
+
 def check_parse(src, node):
     left = parse(src)
     with NODE_EQ_PATCHER:
         assert left == node
+
+
+def check_location(src, node, start, end, fragment):
+    assert node.location
+    assert node.location.start.offset == start
+    assert node.location.end.offset == end
+    assert src[start:end] == fragment
 
 
 def test_symbol():
@@ -196,3 +209,71 @@ def test_mixed_indented_arguments():
                                 Tuple([Symbol('v5')])])])]),
         ]),
     )
+
+
+def test_symbol_location():
+    src = 'a b.c\n  d e.f'
+    a, bc, _d = parse_raw(src).values[0].values
+    d, ef = _d.values
+    check_location(src, a, 0, 1, 'a')
+    check_location(src, bc, 2, 5, 'b.c')
+    check_location(src, d, 8, 9, 'd')
+    check_location(src, ef, 10, 13, 'e.f')
+
+
+def test_string_location():
+    pass
+
+
+def test_number_location():
+    pass
+
+
+def test_keyword_location():
+    pass
+
+
+def test_placeholder_location():
+    src = 'a #b\n  c #d.e'
+    a, b, _c = parse_raw(src).values[0].values
+    c, de = _c.values
+    check_location(src, b, 2, 4, '#b')
+    check_location(src, de, 9, 13, '#d.e')
+
+
+def test_implicit_tuple_location():
+    src = 'a b\n  c\n    :d\n      e'
+    fn_a = parse_raw(src).values[0]
+    _, _, fn_c = fn_a.values
+    _, _, fn_e = fn_c.values
+    check_location(src, fn_a, 0, 22, 'a b\n  c\n    :d\n      e')
+    check_location(src, fn_c, 6, 22, 'c\n    :d\n      e')
+    check_location(src, fn_e, 21, 22, 'e')
+
+
+def test_explicit_tuple_location():
+    src = 'a (b c)'
+    fn_a = parse_raw(src).values[0]
+    _, fn_b = fn_a.values
+    check_location(src, fn_a, 0, 7, 'a (b c)')
+    check_location(src, fn_b, 2, 7, '(b c)')
+
+
+def test_list_location():
+    src = 'a [b c]'
+    fn_a = parse_raw(src).values[0]
+    _, l = fn_a.values
+    check_location(src, fn_a, 0, 7, 'a [b c]')
+    check_location(src, l, 2, 7, '[b c]')
+
+
+def test_dict_location():
+    src = 'a {:b c}'
+    fn_a = parse_raw(src).values[0]
+    _, d = fn_a.values
+    check_location(src, fn_a, 0, 8, 'a {:b c}')
+    check_location(src, d, 2, 8, '{:b c}')
+
+
+def test_join_location():
+    pass

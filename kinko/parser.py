@@ -28,21 +28,32 @@ def _gen(node_cls, coerce_=None):
     return proc
 
 
-def _list(open_br, values):
-    return List(values, location=open_br.location)
+def _list(open_br, values, close_br):
+    return List(values, location=Location(open_br.location.start,
+                                          close_br.location.end))
 
 
-def _dict(open_br, pairs):
-    return Dict(chain.from_iterable(pairs), location=open_br.location)
+def _dict(open_br, pairs, close_br):
+    return Dict(chain.from_iterable(pairs),
+                location=Location(open_br.location.start,
+                                  close_br.location.end))
 
 
-def _tuple(open_par, sym, args):
-    return Tuple([sym] + args, location=open_par.location)
+def _tuple(open_par, sym, args, close_par):
+    return Tuple([sym] + args, location=Location(open_par.location.start,
+                                                 close_par.location.end))
 
 
 def _implicit_tuple(sym, inline_args, indented_args):
+    start_pos = sym.location.start
+    if indented_args:
+        end_pos = indented_args[-1].location.end
+    elif inline_args:
+        end_pos = inline_args[-1].location.end
+    else:
+        end_pos = sym.location.end
     return Tuple([sym] + inline_args + (indented_args or []),
-                 location=sym.location)
+                 location=Location(start_pos, end_pos))
 
 
 def _maybe_join(values):
@@ -79,12 +90,12 @@ def parser():
 
     list_ = ((_tok(Token.OPEN_BRACKET) +
               many(expr | keyword) +
-              delim(Token.CLOSE_BRACKET)) >>
+              _tok(Token.CLOSE_BRACKET)) >>
              apl(_list))
 
     dict_ = ((_tok(Token.OPEN_BRACE) +
               many(keyword + expr) +
-              delim(Token.CLOSE_BRACE)) >>
+              _tok(Token.CLOSE_BRACE)) >>
              apl(_dict))
 
     inline_args = many(expr | keyword)
@@ -92,7 +103,7 @@ def parser():
     explicit_tuple = (
         (_tok(Token.OPEN_PAREN) +
          symbol + inline_args +
-         delim(Token.CLOSE_PAREN)) >>
+         _tok(Token.CLOSE_PAREN)) >>
         apl(_tuple)
     )
 
