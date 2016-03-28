@@ -60,9 +60,11 @@ def _maybe_join(values):
     if len(values) == 1:
         return values[0]
     else:
-        return Tuple([Symbol('join', location=values[0].location),
-                      List(values, location=values[0].location)],
-                     location=values[0].location)
+        start_loc = Location(values[0].location.start, values[0].location.start)
+        range_loc = Location(values[0].location.start, values[-1].location.end)
+        return Tuple([Symbol('join', location=start_loc),
+                      List(values, location=range_loc)],
+                     location=range_loc)
 
 
 def _module(values, eof):

@@ -222,15 +222,27 @@ def test_symbol_location():
 
 
 def test_string_location():
-    pass
+    src = 'a "b"\n  c "d"'
+    a, b, _c = parse_raw(src).values[0].values
+    c, d = _c.values
+    check_location(src, b, 2, 5, '"b"')
+    check_location(src, d, 10, 13, '"d"')
 
 
 def test_number_location():
-    pass
+    src = 'a 123\n  c 4.56'
+    a, n123, _c = parse_raw(src).values[0].values
+    c, n456 = _c.values
+    check_location(src, n123, 2, 5, '123')
+    check_location(src, n456, 10, 14, '4.56')
 
 
 def test_keyword_location():
-    pass
+    src = 'a :b 1\n  c :d 2'
+    a, b, _, _c = parse_raw(src).values[0].values
+    c, d, _ = _c.values
+    check_location(src, b, 2, 4, ':b')
+    check_location(src, d, 11, 13, ':d')
 
 
 def test_placeholder_location():
@@ -276,4 +288,13 @@ def test_dict_location():
 
 
 def test_join_location():
-    pass
+    src = 'a b\n  c 1\n  d 2'
+    fn_a = parse_raw(src).values[0]
+    _, _, j_fn = fn_a.values
+    j, l = j_fn.values
+    c_fn, d_fn = l.values
+    check_location(src, j_fn, 6, 15, 'c 1\n  d 2')
+    check_location(src, j, 6, 6, '')
+    check_location(src, l, 6, 15, 'c 1\n  d 2')
+    check_location(src, c_fn, 6, 9, 'c 1')
+    check_location(src, d_fn, 12, 15, 'd 2')
