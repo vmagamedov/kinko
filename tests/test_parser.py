@@ -1,6 +1,8 @@
 from kinko.nodes import Symbol, Tuple, String, Number, Keyword, Dict, List
 from kinko.nodes import Placeholder, NodeVisitor
-from kinko.parser import parser, parse as _parse
+from kinko.errors import Errors
+from kinko.parser import parser, parse as _parse, ParseError, DICT_ERROR
+from kinko.parser import IMPLICIT_TUPLE_ERROR, EXPLICIT_TUPLE_ERROR
 
 from .base import NODE_EQ_PATCHER
 from .test_tokenizer import tokenize
@@ -36,6 +38,18 @@ def check_location(src, node, start, end, fragment):
     assert node.location.start.offset == start
     assert node.location.end.offset == end
     assert src[start:end] == fragment
+
+
+def check_error(src, msg, start, end, fragment):
+    errors = Errors()
+    try:
+        _parse(list(tokenize(src)), errors)
+    except ParseError:
+        error, = errors.list
+        assert error.message.startswith(msg)
+        assert (error.location.start.offset, error.location.end.offset) == \
+               (start, end)
+        assert src[start:end] == fragment
 
 
 def test_symbol():
@@ -298,3 +312,17 @@ def test_join_location():
     check_location(src, l, 6, 15, 'c 1\n  d 2')
     check_location(src, c_fn, 6, 9, 'c 1')
     check_location(src, d_fn, 12, 15, 'd 2')
+
+
+def test_implicit_tuple_error():
+    check_error('foo\n1\nbar',
+                IMPLICIT_TUPLE_ERROR, 4, 5, '1')
+
+
+def test_explicit_tuple_error():
+    check_error('foo (1 2 3)',
+                EXPLICIT_TUPLE_ERROR, 5, 6, '1')
+
+
+def test_dict_literal_error():
+    check_error('foo {1 2}', DICT_ERROR, 5, 6, '1')

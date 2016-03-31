@@ -3,13 +3,50 @@ from __future__ import absolute_import
 from ast import literal_eval
 from itertools import chain
 
-from funcparserlib.parser import forward_decl, maybe, some, oneplus
-from funcparserlib.parser import skip, many
+from funcparserlib.parser import forward_decl, maybe, some, oneplus, Parser
+from funcparserlib.parser import skip, many, NoParseError
 
 from .nodes import Symbol, String, Placeholder, Keyword, Number, List
 from .nodes import Dict, Tuple
 from .sugar import InterpolateString, TranslateDots
+from .errors import UserError, Errors
 from .tokenizer import Token, Location, Position
+
+
+IMPLICIT_TUPLE_ERROR = 'Invalid function call'
+EXPLICIT_TUPLE_ERROR = 'Invalid tuple literal'
+DICT_ERROR = 'Invalid Dict literal'
+
+
+class ParseError(UserError):
+    pass
+
+
+class LastError(object):
+
+    def __init__(self):
+        self._pos = -1
+        self._explanation = None
+
+    def push(self, position, explanation):
+        if position > self._pos:
+            self._pos = position
+            self._explanation = explanation
+
+    def pop(self, default):
+        return self._explanation or default
+
+
+def error_ctx(p, last_error, message):
+    @Parser
+    def wrapper(tokens, s):
+        try:
+            (v, s2) = p.run(tokens, s)
+        except NoParseError as e:
+            last_error.push(e.state.max, message)
+            raise
+        return v, s2
+    return wrapper
 
 
 def _tok(type_):
@@ -71,7 +108,9 @@ def _module(values, eof):
     return List(values, location=Location(Position(0, 0, 0), eof.location.end))
 
 
-def parser():
+def parser(last_error=None):
+    last_error = LastError() if last_error is None else last_error
+
     def apl(f):
         return lambda x: f(*x)
 
@@ -90,22 +129,30 @@ def parser():
     expr = forward_decl()
     implicit_tuple = forward_decl()
 
-    list_ = ((_tok(Token.OPEN_BRACKET) +
-              many(expr | keyword) +
-              _tok(Token.CLOSE_BRACKET)) >>
-             apl(_list))
+    list_ = (
+        (_tok(Token.OPEN_BRACKET) +
+         many(expr | keyword) +
+         _tok(Token.CLOSE_BRACKET)) >>
+        apl(_list)
+    )
 
-    dict_ = ((_tok(Token.OPEN_BRACE) +
-              many(keyword + expr) +
-              _tok(Token.CLOSE_BRACE)) >>
-             apl(_dict))
+    dict_ = (
+        error_ctx(_tok(Token.OPEN_BRACE) +
+                  many(keyword + expr) +
+                  _tok(Token.CLOSE_BRACE),
+                  last_error,
+                  DICT_ERROR) >>
+        apl(_dict)
+    )
 
     inline_args = many(expr | keyword)
 
     explicit_tuple = (
-        (_tok(Token.OPEN_PAREN) +
-         symbol + inline_args +
-         _tok(Token.CLOSE_PAREN)) >>
+        error_ctx(_tok(Token.OPEN_PAREN) +
+                  symbol + inline_args +
+                  _tok(Token.CLOSE_PAREN),
+                  last_error,
+                  EXPLICIT_TUPLE_ERROR) >>
         apl(_tuple)
     )
 
@@ -126,10 +173,12 @@ def parser():
     )
 
     implicit_tuple.define(
-        (symbol + inline_args + delim(Token.NEWLINE) +
-         maybe(delim(Token.INDENT) +
-               indented_args_kwargs +
-               delim(Token.DEDENT))) >>
+        error_ctx(symbol + inline_args + delim(Token.NEWLINE) +
+                  maybe(delim(Token.INDENT) +
+                        indented_args_kwargs +
+                        delim(Token.DEDENT)),
+                  last_error,
+                  IMPLICIT_TUPLE_ERROR) >>
         apl(_implicit_tuple)
     )
 
@@ -143,8 +192,21 @@ def parser():
     return body
 
 
-def parse(tokens):
-    node = parser().parse(tokens)
-    node = InterpolateString().visit(node)
-    node = TranslateDots().visit(node)
-    return node
+def parse(tokens, errors=None):
+    errors = Errors() if errors is None else errors
+    last_error = LastError()
+    try:
+        node = parser(last_error).parse(tokens)
+    except NoParseError as e:
+        msg = last_error.pop('Syntax error')
+        if len(tokens) > e.state.max:
+            token = tokens[e.state.max]
+        else:
+            token = tokens[-1]
+        with errors.location(token.location):
+            raise ParseError('{}; unexpected token "{}"'
+                             .format(msg, token.type))
+    else:
+        node = InterpolateString().visit(node)
+        node = TranslateDots().visit(node)
+        return node
