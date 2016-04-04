@@ -10,9 +10,9 @@ from ..types import NamedArgMeta, VarArgsMeta, VarNamedArgsMeta, UnionMeta
 from ..types import StringTypeMeta
 from ..nodes import String, Tuple, Symbol, List, Number, Placeholder
 from ..nodes import NodeVisitor
-from ..utils import Environ
+from ..utils import Environ, split_args, normalize_args
 from ..compat import text_type, text_type_name
-from ..checker import split_args, normalize_args, DEF_TYPE, HTML_TAG_TYPE
+from ..checker import DEF_TYPE, HTML_TAG_TYPE
 from ..checker import IF1_TYPE, IF2_TYPE, EACH_TYPE, JOIN1_TYPE, JOIN2_TYPE
 from ..checker import GET_TYPE, get_type, returns_markup, IF3_TYPE
 from ..checker import IF_SOME1_TYPE, IF_SOME2_TYPE, IF_SOME3_TYPE, LET_TYPE

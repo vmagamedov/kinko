@@ -11,7 +11,7 @@ from .types import RecordMeta, BoolType, Union, ListTypeMeta, DictTypeMeta
 from .types import TypingMeta, UnionMeta, Nothing, Option, VarArgs, FuncMeta
 from .types import TypeTransformer, Markup, VarNamedArgs, VarNamedArgsMeta
 from .types import MarkupMeta
-from .utils import VarsGen, split_args
+from .utils import VarsGen
 from .constant import HTML_ELEMENTS
 
 
@@ -68,7 +68,7 @@ class NamesResolver(NodeTransformer):
     def visit_symbol(self, node):
         ns, sep, name = node.name.partition('/')
         if name and ns == '.':
-            return Symbol(sep.join([self.ns, name]))
+            return node.clone_with(sep.join([self.ns, name]))
         else:
             return node
 
@@ -76,8 +76,10 @@ class NamesResolver(NodeTransformer):
         if node.values[0].name == 'def':
             (def_sym, name_sym), body = node.values[:2], node.values[2:]
             qualified_name = '/'.join([self.ns, name_sym.name])
-            return Tuple([self.visit(def_sym), Symbol(qualified_name)] +
-                         [self.visit(i) for i in body])
+            name_sym = name_sym.clone_with(qualified_name)
+            values = ([self.visit(def_sym), name_sym] +
+                      [self.visit(i) for i in body])
+            return node.clone_with(values)
         else:
             return super(NamesResolver, self).visit_tuple(node)
 
@@ -283,71 +285,107 @@ def unify(t1, t2, backref=None):
                              .format(t1, t2))
 
 
-def normalize_args(fn_type, pos_args, kw_args):
+def split_args(args):
+    pos_args, kw_args = [], {}
+    i = enumerate(args)
+    try:
+        while True:
+            arg_pos, arg = next(i)
+            if isinstance(arg, Keyword):
+                try:
+                    value_pos, _ = next(i)
+                except StopIteration:
+                    raise TypeError('Missing named argument value')
+                else:
+                    kw_args[arg.name] = value_pos
+            else:
+                pos_args.append(arg_pos)
+    except StopIteration:
+        return pos_args, kw_args
+
+
+def normalize_args(fn_type, args, pos_args, kw_args):
     pos_args, kw_args = list(pos_args), dict(kw_args)
     norm_args = []
+    norm_args_pos = []
     missing_arg = False
     for arg_type in fn_type.__args__:
         if isinstance(arg_type, NamedArgMeta):
             try:
-                value = kw_args.pop(arg_type.__arg_name__)
+                value_pos = kw_args.pop(arg_type.__arg_name__)
             except KeyError:
                 missing_arg = True
                 break
             else:
-                norm_args.append(value)
+                norm_args.append(args[value_pos])
+                norm_args_pos.append(value_pos)
         elif isinstance(arg_type, VarArgsMeta):
-            norm_args.append(list(pos_args))
+            norm_args.append([args[pos] for pos in pos_args])
+            norm_args_pos.append(list(pos_args))
             del pos_args[:]
         elif isinstance(arg_type, VarNamedArgsMeta):
-            norm_args.append(kw_args.copy())
+            norm_args.append({k: args[v] for k, v in kw_args.items()})
+            norm_args_pos.append(kw_args.copy())
             kw_args.clear()
         else:
             try:
-                value = pos_args.pop(0)
+                value_pos = pos_args.pop(0)
             except IndexError:
                 missing_arg = True
                 break
             else:
-                norm_args.append(value)
+                norm_args.append(args[value_pos])
+                norm_args_pos.append(value_pos)
     if pos_args or kw_args or missing_arg:
         raise SignatureMismatch
     else:
-        return norm_args
+        return norm_args, norm_args_pos
 
 
 def match_fn(fn_types, args):
     pos_args, kw_args = split_args(args)
     for fn_type in fn_types:
         try:
-            norm_args = normalize_args(fn_type, pos_args, kw_args)
+            norm_args, norm_args_pos = \
+                normalize_args(fn_type, args, pos_args, kw_args)
         except SignatureMismatch:
             continue
         else:
-            return fn_type, norm_args
+            return fn_type, norm_args, norm_args_pos
     else:
         raise KinkoTypeError('Function signature mismatch')
 
 
-def restore_args(fn_type, norm_args):
-    # TODO: preserve original args ordering
-    args = []
+def restore_args(fn_type, args, norm_args, norm_args_pos):
+    args_map = {}
     _norm_args = list(norm_args)
+    _norm_args_pos = list(norm_args_pos)
     for arg_type in fn_type.__args__:
         if isinstance(arg_type, NamedArgMeta):
-            args.extend((Keyword(arg_type.__arg_name__),
-                         _norm_args.pop(0)))
+            value = _norm_args.pop(0)
+            value_pos = _norm_args_pos.pop(0)
+            args_map[value_pos - 1] = args[value_pos - 1]  # keyword
+            args_map[value_pos] = value
         elif isinstance(arg_type, VarArgsMeta):
-            args.extend(_norm_args.pop(0))
+            values = _norm_args.pop(0)
+            values_pos = _norm_args_pos.pop(0)
+            for v, v_pos in zip(values, values_pos):
+                args_map[v_pos] = v
         elif isinstance(arg_type, VarNamedArgsMeta):
-            args.extend(chain.from_iterable(
-                (Keyword(key), value)
-                for key, value in _norm_args.pop(0).items()
-            ))
+            values_map = _norm_args.pop(0)
+            values_pos = _norm_args_pos.pop(0)
+            for key in values_map.keys():
+                value = values_map[key]
+                value_pos = values_pos[key]
+                args_map[value_pos - 1] = args[value_pos - 1]  # keyword
+                args_map[value_pos] = value
         else:
-            args.append(_norm_args.pop(0))
+            value = _norm_args.pop(0)
+            value_pos = _norm_args_pos.pop(0)
+            args_map[value_pos] = value
     assert not _norm_args
-    return args
+    assert len(args_map) == len(args)
+    return [args_map[i] for i in range(len(args))]
 
 
 def check_arg(arg, type_, env):
@@ -419,14 +457,14 @@ def check_let(fn_type, env, bindings, expr):
     for let_sym, let_expr in zip(bindings.values[::2], bindings.values[1::2]):
         assert isinstance(let_sym, Symbol), repr(let_sym)
         let_expr = check(let_expr, env)
-        let_sym = Symbol.typed(let_expr.__type__, let_sym.name)
+        let_sym = let_sym.clone_with(let_sym.name, type=let_expr.__type__)
         let_vars[let_sym.name] = let_sym.__type__
         typed_bindings.append(let_sym)
         typed_bindings.append(let_expr)
     with env.push(let_vars):
         typed_expr = check(expr, env)
     unify(fn_type.__result__, typed_expr.__type__)
-    return List(typed_bindings), typed_expr
+    return bindings.clone_with(typed_bindings), typed_expr
 
 
 def check_def(fn_type, env, sym, body):
@@ -474,7 +512,7 @@ def check_each(fn_type, env, var, col, body):
     col = check(col, env)
     var_type = TypeVar[None]
     unify(col.__type__, ListType[var_type])
-    var = Symbol.typed(var_type, var.name)
+    var = var.clone_with(var.name, type=var_type)
     with env.push({var.name: var_type}):
         body = check(body, env)
     return var, col, body
@@ -497,7 +535,7 @@ def check_if_some1(fn_type, env, bind, then_):
     with env.push({bind_sym.name: then_expr_type}):
         then_ = check(then_, env)
     unify(fn_type.__result__, Option[then_.__type__])
-    return List([bind_sym, bind_expr]), then_
+    return bind.clone_with([bind_sym, bind_expr]), then_
 
 
 def check_if_some2(fn_type, env, bind, then_, else_):
@@ -518,7 +556,7 @@ def check_if_some2(fn_type, env, bind, then_, else_):
         then_ = check(then_, env)
         else_ = check(else_, env)
     unify(fn_type.__result__, Union[then_.__type__, else_.__type__])
-    return List([bind_sym, bind_expr]), then_, else_
+    return bind.clone_with([bind_sym, bind_expr]), then_, else_
 
 
 FN_TYPES = {
@@ -575,7 +613,7 @@ def check_expr(node, env):
         else:
             fn_types = [fn_type]
 
-    matched_fn_type, norm_args = match_fn(fn_types, args)
+    matched_fn_type, norm_args, norm_args_pos = match_fn(fn_types, args)
     fresh_fn_type = _FreshVars().visit(matched_fn_type)
 
     proc = FN_TYPES.get(matched_fn_type)
@@ -596,10 +634,11 @@ def check_expr(node, env):
                 arg = check_arg(arg, arg_type, env)
             uni_norm_args.append(arg)
 
-    uni_args = restore_args(matched_fn_type, uni_norm_args)
+    uni_args = restore_args(matched_fn_type, args, uni_norm_args, norm_args_pos)
 
-    return Tuple.typed(fresh_fn_type.__result__,
-                       [Symbol.typed(matched_fn_type, sym.name)] + uni_args)
+    t_sym = sym.clone_with(sym.name, type=matched_fn_type)
+    return node.clone_with([t_sym] + uni_args,
+                           type=fresh_fn_type.__result__)
 
 
 def check(node, env):
@@ -607,20 +646,20 @@ def check(node, env):
         return check_expr(node, env)
 
     elif isinstance(node, Symbol):
-        return Symbol.typed(env[node.name], node.name)
+        return node.clone_with(node.name, type=env[node.name])
 
     elif isinstance(node, Placeholder):
-        return Placeholder.typed(env[node.name], node.name)
+        return node.clone_with(node.name, type=env[node.name])
 
     elif isinstance(node, String):
-        return String.typed(StringType, node.value)
+        return node.clone_with(node.value, type=StringType)
 
     elif isinstance(node, Number):
-        return Number.typed(IntType, node.value)
+        return node.clone_with(node.value, type=IntType)
 
     elif isinstance(node, List):
         values = [check(v, env) for v in node.values]
-        return List.typed(ListType[Union[(v.__type__ for v in values)]],
-                          values)
+        type_ = ListType[Union[(v.__type__ for v in values)]]
+        return node.clone_with(values, type=type_)
 
     raise NotImplementedError(repr(node))

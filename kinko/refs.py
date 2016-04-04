@@ -1,7 +1,7 @@
 from .nodes import NodeVisitor
 from .types import TypeVarMeta, RecordMeta, ListTypeMeta, VarNamedArgsMeta
 from .types import VarArgsMeta, NamedArgMeta, TypeRefMeta
-from .utils import split_args
+from .utils import split_args, normalize_args
 from .query import Edge, Link, Field, merge
 
 
@@ -167,9 +167,6 @@ class RefsCollector(NodeVisitor):
             self._calls.clear()
         else:
             self._calls.add(sym.name)
-
-            from kinko.checker import normalize_args
-
             fn_type = sym.__type__
             pos_args, kw_args = split_args(args)
             norm_args = normalize_args(fn_type, pos_args, kw_args)

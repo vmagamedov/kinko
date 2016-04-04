@@ -9,9 +9,11 @@ _undefined = object()
 class Node(object):
     location = None
 
-    def __init__(self, location=_undefined):
+    def __init__(self, location=_undefined, type=_undefined):
         if location is not _undefined:
             self.location = location
+        if type is not _undefined:
+            self.__type__ = type
 
     def clone(self):
         cls = self.__class__
