@@ -12,10 +12,18 @@ class UserError(Exception):
 
 
 class Errors(object):
-    module = None
 
     def __init__(self):
         self.list = []
+        self._modules = [None]
+
+    @contextmanager
+    def module(self, name):
+        self._modules.append(name)
+        try:
+            yield
+        finally:
+            self._modules.pop()
 
     @contextmanager
     def location(self, location):
@@ -26,4 +34,4 @@ class Errors(object):
             raise
 
     def report(self, location, message):
-        self.list.append(Error(self.module, location, message))
+        self.list.append(Error(self._modules[-1], location, message))

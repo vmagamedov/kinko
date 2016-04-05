@@ -12,23 +12,25 @@ from .types import TypingMeta, UnionMeta, Nothing, Option, VarArgs, FuncMeta
 from .types import TypeTransformer, Markup, VarNamedArgs, VarNamedArgsMeta
 from .types import MarkupMeta
 from .utils import VarsGen
+from .errors import Errors, UserError
 from .constant import HTML_ELEMENTS
 
 
-class KinkoTypeError(TypeError):
+class TypeCheckError(UserError):
     pass
 
 
-class SignatureMismatch(TypeError):
+class SignatureMismatch(UserError):
     pass
 
 
 class Environ(object):
 
-    def __init__(self, defs=None):
+    def __init__(self, defs=None, errors=None):
         self.defs = defs or {}
         self.vars = deque([{}])
         self._root = TypeVar[None]
+        self.errors = Errors() if errors is None else errors
 
     @contextmanager
     def push(self, mapping):
@@ -228,7 +230,7 @@ def unify(t1, t2, backref=None):
         backref = t1 if t1.__backref__ else backref
         try:
             unify(t1.__instance__, t2, backref)
-        except KinkoTypeError:
+        except TypeCheckError:
             if (
                 backref and is_from_arg(backref) and
                 not isinstance(t1.__instance__, TypingMeta) and
@@ -249,7 +251,7 @@ def unify(t1, t2, backref=None):
             for t in t2.__types__:
                 try:
                     unify(t1, t, backref)
-                except KinkoTypeError:
+                except TypeCheckError:
                     continue
                 else:
                     return
@@ -262,7 +264,7 @@ def unify(t1, t2, backref=None):
                         t1.__items__.update(field_refs(backref, s2 - s1))
                     else:
                         if s2 - s1:
-                            raise KinkoTypeError('Missing keys {} in {!r}'
+                            raise TypeCheckError('Missing keys {} in {!r}'
                                                  .format(s2 - s1, t1))
                     for k, v2 in t2.__items__.items():
                         unify(t1.__items__[k], v2, FieldRef(backref, k))
@@ -281,7 +283,7 @@ def unify(t1, t2, backref=None):
                     # means simple type with nullary constructor
                     return
 
-        raise KinkoTypeError('Unexpected type: {!r}, instead of: {!r}'
+        raise TypeCheckError('Unexpected type: {!r}, instead of: {!r}'
                              .format(t1, t2))
 
 
@@ -353,7 +355,7 @@ def match_fn(fn_types, args):
         else:
             return fn_type, norm_args, norm_args_pos
     else:
-        raise KinkoTypeError('Function signature mismatch')
+        raise TypeCheckError('Function signature mismatch')
 
 
 def restore_args(fn_type, args, norm_args, norm_args_pos):
@@ -390,7 +392,8 @@ def restore_args(fn_type, args, norm_args, norm_args_pos):
 
 def check_arg(arg, type_, env):
     arg = check(arg, env)
-    unify(arg.__type__, type_)
+    with env.errors.location(arg.location):
+        unify(arg.__type__, type_)
     return arg
 
 
@@ -473,7 +476,7 @@ def check_def(fn_type, env, sym, body):
     visitor.visit(body)
     kw_arg_names = visitor.placeholders
     def_vars = {name: arg_var(name) for name in kw_arg_names}
-    with env.push(def_vars):
+    with env.push(def_vars), env.errors.module(sym.ns):
         body = check(body, env)
     args = [NamedArg[name, def_vars[name]] for name in kw_arg_names]
     unify(fn_type.__result__, Func[args, body.__type__])
@@ -598,11 +601,11 @@ def check_expr(node, env):
         try:
             fn_types = BUILTINS[sym.name]
         except KeyError:
-            raise KinkoTypeError('Unknown function name: {}'.format(sym.name))
+            raise TypeCheckError('Unknown function name: {}'.format(sym.name))
     else:
         if isinstance(fn_type, Unchecked):
             if fn_type.in_progress:
-                raise KinkoTypeError('Recursive call of the {} function'
+                raise TypeCheckError('Recursive call of the {} function'
                                      .format(sym.name))
             else:
                 env.define(sym.name, fn_type._replace(in_progress=True))

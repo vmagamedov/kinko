@@ -50,6 +50,8 @@ def check_error(src, msg, start, end, fragment):
         assert (error.location.start.offset, error.location.end.offset) == \
                (start, end)
         assert src[start:end] == fragment
+    else:
+        raise AssertionError('Error not raised')
 
 
 def test_symbol():

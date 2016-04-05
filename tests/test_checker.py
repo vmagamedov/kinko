@@ -1,3 +1,5 @@
+from textwrap import dedent
+
 import py.test
 
 from kinko.refs import ArgRef
@@ -6,7 +8,8 @@ from kinko.nodes import String
 from kinko.types import Func, IntType, StringType, NamedArg, TypeVar, Markup
 from kinko.types import Record, ListType, Union, DictType, Option
 from kinko.types import VarArgs, VarNamedArgs, BoolType, RecordMeta
-from kinko.checker import Environ, check, KinkoTypeError, EACH_TYPE, _FreshVars
+from kinko.errors import Errors
+from kinko.checker import Environ, check, TypeCheckError, EACH_TYPE, _FreshVars
 from kinko.checker import LET_TYPE, DEF_TYPE, GET_TYPE, IF2_TYPE, IF_SOME1_TYPE
 from kinko.checker import unify, NamesResolver, def_types, IF1_TYPE, IF3_TYPE
 from kinko.checker import match_fn, restore_args, HTML_TAG_TYPE, IF_SOME2_TYPE
@@ -16,8 +19,8 @@ from .base import NODE_EQ_PATCHER, TYPE_EQ_PATCHER
 from .test_parser import parse, LocationChecker
 
 
-def check_expr(src, env=None):
-    node = check(parse(src).values[0], Environ(env))
+def check_expr(src, env=None, errors=None):
+    node = check(parse(src).values[0], Environ(env, errors))
     LocationChecker().visit(node)
     return node
 
@@ -32,6 +35,19 @@ def check_expr_type(src, typed, env=None):
     check_eq(node, typed)
 
 
+def check_errors(src, env, msg, fragment):
+    src = dedent(src).strip()
+    errors = Errors()
+    try:
+        check_expr(src, env, errors)
+    except TypeCheckError:
+        e, = errors.list
+        assert msg in e.message
+        assert src[e.location.start.offset:e.location.end.offset] == fragment
+    else:
+        raise AssertionError('Error not raised')
+
+
 def test_match_fn():
     # basic args
     check_eq(
@@ -39,10 +55,10 @@ def test_match_fn():
                  [1, 2]),
         (Func[[IntType, IntType], IntType], [1, 2], [0, 1])
     )
-    with py.test.raises(KinkoTypeError):
+    with py.test.raises(TypeCheckError):
         match_fn([Func[[IntType, IntType], IntType]],
                  [1])
-    with py.test.raises(KinkoTypeError):
+    with py.test.raises(TypeCheckError):
         match_fn([Func[[IntType, IntType], IntType]],
                  [1, 2, 3])
     # named args
@@ -56,10 +72,10 @@ def test_match_fn():
                  [Keyword('foo'), 2, 1]),
         (Func[[IntType, NamedArg['foo', IntType]], IntType], [1, 2], [2, 1])
     )
-    with py.test.raises(KinkoTypeError):
+    with py.test.raises(TypeCheckError):
         match_fn([Func[[IntType, NamedArg['foo', IntType]], IntType]],
                  [1])
-    with py.test.raises(KinkoTypeError):
+    with py.test.raises(TypeCheckError):
         match_fn([Func[[IntType, NamedArg['foo', IntType]], IntType]],
                  [1, Keyword('foo'), 2, Keyword('bar'), 3])
     # variable args
@@ -126,7 +142,7 @@ def test_restore_args():
 def test_unify_type():
     unify(IntType, IntType)
 
-    with py.test.raises(KinkoTypeError):
+    with py.test.raises(TypeCheckError):
         unify(IntType, StringType)
 
 
@@ -139,7 +155,7 @@ def test_unify_type_var():
     unify(IntType, b)
     check_eq(b.__instance__, IntType)
 
-    with py.test.raises(KinkoTypeError):
+    with py.test.raises(TypeCheckError):
         unify(TypeVar[IntType], StringType)
 
 
@@ -162,7 +178,7 @@ def test_unify_subtype():
 def test_unify_union():
     a = Union[StringType, IntType]
     unify(a, a)
-    with py.test.raises(KinkoTypeError):
+    with py.test.raises(TypeCheckError):
         unify(a, StringType)
     unify(IntType, a)
     unify(StringType, a)
@@ -173,7 +189,7 @@ def test_unify_record():
     unify(rec_type, Record[{'a': IntType}])
     check_eq(rec_type, Record[{'a': IntType}])
 
-    with py.test.raises(KinkoTypeError):
+    with py.test.raises(TypeCheckError):
         unify(Record[{'a': IntType}], Record[{'a': StringType}])
 
 
@@ -207,7 +223,7 @@ def test_func():
                               Keyword('step'), Number.typed(IntType, 2)]),
         {'inc-step': inc_step_type},
     )
-    with py.test.raises(KinkoTypeError):
+    with py.test.raises(TypeCheckError):
         check_expr('inc "foo"', {'inc': inc_type})
 
 
@@ -281,7 +297,7 @@ def test_record():
         ]),
         {'inc': inc_type, 'bar': bar_type},
     )
-    with py.test.raises(KinkoTypeError):
+    with py.test.raises(TypeCheckError):
         check_expr('inc bar.unknown',
                    {'inc': inc_type, 'bar': bar_type})
 
@@ -428,7 +444,7 @@ def test_if_some():
         ]),
         env,
     )
-    with py.test.raises(KinkoTypeError):
+    with py.test.raises(TypeCheckError):
         check_expr('inc foo.bar', env)
 
 
@@ -554,7 +570,7 @@ def test_list():
         ]),
         {'foo': foo_type},
     )
-    with py.test.raises(KinkoTypeError):
+    with py.test.raises(TypeCheckError):
         check_expr('foo [1 2 "3"]',
                    {'foo': Func[[ListType[IntType]], IntType]})
 
@@ -597,3 +613,15 @@ def test_dependent():
     # checks that TypeVar instance is the same
     assert bar_expr.__type__.__instance__.__args__[0].__arg_type__ is \
         bar_expr.__type__.__instance__.__result__
+
+
+def test_def_errors():
+    check_errors(
+        """
+        def foo-mod/bar-func
+          foo [1 2 "3"]
+        """,
+        {'foo': Func[[ListType[IntType]], IntType]},
+        'Unexpected type',
+        '[1 2 "3"]',
+    )
