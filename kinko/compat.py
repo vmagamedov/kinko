@@ -18,6 +18,7 @@ def with_metaclass(meta, *bases):
 
 if PY3:
     import builtins
+    from itertools import zip_longest as _zip_longest
 
     def _exec_in(source, globals_dict):
         getattr(builtins, 'exec')(source, globals_dict)
@@ -26,8 +27,13 @@ if PY3:
     text_type_name = 'str'
 
 else:
+    from itertools import izip_longest as _zip_longest
+
     def _exec_in(source, globals_dict):
         exec('exec source in globals_dict')
 
     text_type = unicode  # noqa
     text_type_name = 'unicode'
+
+
+zip_longest = _zip_longest

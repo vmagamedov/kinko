@@ -13,7 +13,12 @@ from .types import TypeTransformer, Markup, VarNamedArgs, VarNamedArgsMeta
 from .types import MarkupMeta
 from .utils import VarsGen
 from .errors import Errors, UserError
+from .compat import zip_longest
 from .constant import HTML_ELEMENTS
+
+
+class SyntaxError(UserError):
+    pass
 
 
 class TypeCheckError(UserError):
@@ -108,7 +113,7 @@ class NamesUnResolver(NodeTransformer):
 def def_types(node):
     assert isinstance(node, List), type(node)
     return {d.values[1].name: Unchecked(d, False)
-            for d in node.values}
+            for d in node.values if isinstance(d.values[1], Symbol)}
 
 
 def collect_defs(nodes):
@@ -454,11 +459,20 @@ def ctx_var(t, name):
 
 
 def check_let(fn_type, env, bindings, expr):
-    assert isinstance(bindings, List), repr(bindings)
+    with env.errors.location(bindings.location):
+        if not isinstance(bindings, List):
+            raise SyntaxError('Variable bindings should be a list')
     let_vars = {}
     typed_bindings = []
-    for let_sym, let_expr in zip(bindings.values[::2], bindings.values[1::2]):
-        assert isinstance(let_sym, Symbol), repr(let_sym)
+    for let_sym, let_expr in zip_longest(bindings.values[::2],
+                                         bindings.values[1::2]):
+        with env.errors.location(let_sym.location):
+            if not isinstance(let_sym, Symbol):
+                raise SyntaxError('Even elements of "let" bindings '
+                                  'should be a symbol')
+            if let_expr is None:
+                raise SyntaxError('Variable does not have a corresponding '
+                                  'value after it')
         let_expr = check(let_expr, env)
         let_sym = let_sym.clone_with(let_sym.name, type=let_expr.__type__)
         let_vars[let_sym.name] = let_sym.__type__
@@ -471,12 +485,14 @@ def check_let(fn_type, env, bindings, expr):
 
 
 def check_def(fn_type, env, sym, body):
-    assert isinstance(sym, Symbol), repr(sym)
+    if not isinstance(sym, Symbol):
+        with env.errors.location(sym.location):
+            raise SyntaxError('Function name should be defined using symbol')
     visitor = _PlaceholdersExtractor()
     visitor.visit(body)
     kw_arg_names = visitor.placeholders
     def_vars = {name: arg_var(name) for name in kw_arg_names}
-    with env.push(def_vars), env.errors.module(sym.ns):
+    with env.push(def_vars), env.errors.func_ctx(sym.ns, sym.rel):
         body = check(body, env)
     args = [NamedArg[name, def_vars[name]] for name in kw_arg_names]
     unify(fn_type.__result__, Func[args, body.__type__])
@@ -488,14 +504,18 @@ def check_def(fn_type, env, sym, body):
 
 def check_get(fn_type, env, obj, attr):
     obj = check(obj, env)
-    assert isinstance(attr, Symbol)
-    unify(obj.__type__, Record[{attr.name: fn_type.__result__}])
+    if not isinstance(attr, Symbol):
+        with env.errors.location(attr.location):
+            raise SyntaxError('Record field name should be specified by symbol')
+    with env.errors.location(obj.location):
+        unify(obj.__type__, Record[{attr.name: fn_type.__result__}])
     return obj, attr
 
 
 def check_if1(fn_type, env, test, then_):
     test = check(test, env)
-    unify(test.__type__, BoolType)
+    with env.errors.location(test.location):
+        unify(test.__type__, BoolType)
     then_ = check(then_, env)
     unify(fn_type.__result__, Option[then_.__type__])
     return test, then_
@@ -503,7 +523,8 @@ def check_if1(fn_type, env, test, then_):
 
 def check_if2(fn_type, env, test, then_, else_):
     test = check(test, env)
-    unify(test.__type__, BoolType)
+    with env.errors.location(test.location):
+        unify(test.__type__, BoolType)
     then_ = check(then_, env)
     else_ = check(else_, env)
     unify(fn_type.__result__, Union[then_.__type__, else_.__type__])
@@ -511,51 +532,57 @@ def check_if2(fn_type, env, test, then_, else_):
 
 
 def check_each(fn_type, env, var, col, body):
-    assert isinstance(var, Symbol)
+    if not isinstance(var, Symbol):
+        with env.errors.location(var.location):
+            raise SyntaxError('Variable name should be specified by symbol')
     col = check(col, env)
     var_type = TypeVar[None]
-    unify(col.__type__, ListType[var_type])
+    with env.errors.location(col.location):
+        unify(col.__type__, ListType[var_type])
     var = var.clone_with(var.name, type=var_type)
     with env.push({var.name: var_type}):
         body = check(body, env)
     return var, col, body
 
 
-def check_if_some1(fn_type, env, bind, then_):
-    assert isinstance(bind, List)
+def _check_if_some_bind(env, bind):
+    if not isinstance(bind, List):
+        with env.errors.location(bind.location):
+            raise SyntaxError('Variable binding should be specified by list')
+    if len(bind.values) != 2:
+        with env.errors.location(bind.location):
+            raise SyntaxError('Variable binding should be specified using '
+                              'list with exactly two elements')
     bind_sym, bind_expr = bind.values
-    assert isinstance(bind_sym, Symbol)
+    if not isinstance(bind_sym, Symbol):
+        with env.errors.location(bind_sym.location):
+            raise SyntaxError('Variable name should be specified by symbol')
     bind_expr = check(bind_expr, env)
     bind_expr_type = get_type(bind_expr)
     if (
         isinstance(bind_expr_type, UnionMeta) and
         Nothing in bind_expr_type.__types__
     ):
-        then_expr_type = Union[bind_expr_type.__types__ - {Nothing}]
+        inner_expr_type = Union[bind_expr_type.__types__ - {Nothing}]
     else:
-        # TODO: warn that this check is not necessary
-        then_expr_type = bind_expr_type
-    with env.push({bind_sym.name: then_expr_type}):
+        env.errors.warn(bind_expr.location,
+                        'if-some check is not necessary, expression type '
+                        'is not optional')
+        inner_expr_type = bind_expr_type
+    return bind_sym, bind_expr, inner_expr_type
+
+
+def check_if_some1(fn_type, env, bind, then_):
+    bind_sym, bind_expr, inner_expr_type = _check_if_some_bind(env, bind)
+    with env.push({bind_sym.name: inner_expr_type}):
         then_ = check(then_, env)
     unify(fn_type.__result__, Option[then_.__type__])
     return bind.clone_with([bind_sym, bind_expr]), then_
 
 
 def check_if_some2(fn_type, env, bind, then_, else_):
-    assert isinstance(bind, List)
-    bind_sym, bind_expr = bind.values
-    assert isinstance(bind_sym, Symbol)
-    bind_expr = check(bind_expr, env)
-    bind_expr_type = get_type(bind_expr)
-    if (
-        isinstance(bind_expr_type, UnionMeta) and
-        Nothing in bind_expr_type.__types__
-    ):
-        then_expr_type = Union[bind_expr_type.__types__ - {Nothing}]
-    else:
-        # TODO: warn that this check is not necessary
-        then_expr_type = bind_expr_type
-    with env.push({bind_sym.name: then_expr_type}):
+    bind_sym, bind_expr, inner_expr_type = _check_if_some_bind(env, bind)
+    with env.push({bind_sym.name: inner_expr_type}):
         then_ = check(then_, env)
         else_ = check(else_, env)
     unify(fn_type.__result__, Union[then_.__type__, else_.__type__])
@@ -601,12 +628,15 @@ def check_expr(node, env):
         try:
             fn_types = BUILTINS[sym.name]
         except KeyError:
-            raise TypeCheckError('Unknown function name: {}'.format(sym.name))
+            with env.errors.location(sym.location):
+                raise TypeCheckError('Unknown function name: {}'
+                                     .format(sym.name))
     else:
         if isinstance(fn_type, Unchecked):
             if fn_type.in_progress:
-                raise TypeCheckError('Recursive call of the {} function'
-                                     .format(sym.name))
+                with env.errors.location(sym.location):
+                    raise TypeCheckError('Recursive call of the function {!r}'
+                                         .format(sym.name))
             else:
                 env.define(sym.name, fn_type._replace(in_progress=True))
                 check(fn_type.node, env)
@@ -616,7 +646,8 @@ def check_expr(node, env):
         else:
             fn_types = [fn_type]
 
-    matched_fn_type, norm_args, norm_args_pos = match_fn(fn_types, args)
+    with env.errors.location(sym.location):
+        matched_fn_type, norm_args, norm_args_pos = match_fn(fn_types, args)
     fresh_fn_type = _FreshVars().visit(matched_fn_type)
 
     proc = FN_TYPES.get(matched_fn_type)

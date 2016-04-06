@@ -8,7 +8,7 @@ from kinko.nodes import String
 from kinko.types import Func, IntType, StringType, NamedArg, TypeVar, Markup
 from kinko.types import Record, ListType, Union, DictType, Option
 from kinko.types import VarArgs, VarNamedArgs, BoolType, RecordMeta
-from kinko.errors import Errors
+from kinko.errors import Errors, UserError, ERROR, WARNING
 from kinko.checker import Environ, check, TypeCheckError, EACH_TYPE, _FreshVars
 from kinko.checker import LET_TYPE, DEF_TYPE, GET_TYPE, IF2_TYPE, IF_SOME1_TYPE
 from kinko.checker import unify, NamesResolver, def_types, IF1_TYPE, IF3_TYPE
@@ -25,6 +25,15 @@ def check_expr(src, env=None, errors=None):
     return node
 
 
+def check_exprs(src, env=None, errors=None):
+    node = parse(src)
+    env = env or {}
+    env.update(def_types(node))
+    node = check(node, Environ(env, errors))
+    LocationChecker().visit(node)
+    return node
+
+
 def check_eq(first, second):
     with NODE_EQ_PATCHER, TYPE_EQ_PATCHER:
         assert first == second
@@ -35,17 +44,23 @@ def check_expr_type(src, typed, env=None):
     check_eq(node, typed)
 
 
-def check_errors(src, env, msg, fragment):
+def check_error(src, func, fragment, msg, env=None, severity=ERROR):
     src = dedent(src).strip()
     errors = Errors()
     try:
-        check_expr(src, env, errors)
-    except TypeCheckError:
-        e, = errors.list
-        assert msg in e.message
-        assert src[e.location.start.offset:e.location.end.offset] == fragment
-    else:
-        raise AssertionError('Error not raised')
+        check_exprs(src, env, errors)
+    except UserError:
+        pass
+    assert errors.list
+    e, = errors.list
+    assert msg in e.message
+    assert e.func == (tuple(func.split('/')) if func is not None else None)
+    assert src[e.location.start.offset:e.location.end.offset] == fragment
+    assert e.severity == severity
+
+
+def check_unify_error(src, func, fragment, env=None):
+    check_error(src, func, fragment, 'Unexpected type', env)
 
 
 def test_match_fn():
@@ -616,12 +631,184 @@ def test_dependent():
 
 
 def test_def_errors():
-    check_errors(
+    check_error(
         """
-        def foo-mod/bar-func
-          foo [1 2 "3"]
+        def "bar"
+          div "Test"
         """,
-        {'foo': Func[[ListType[IntType]], IntType]},
-        'Unexpected type',
-        '[1 2 "3"]',
+        None, '"bar"',
+        'Function name should be defined',
+    )
+
+
+def test_let_errors():
+    check_error(
+        """
+        def foo/bar
+          let {:x 1}
+            div "Test"
+        """,
+        'foo/bar', '{:x 1}',
+        'Variable bindings should be a list',
+    )
+    check_error(
+        """
+        def foo/bar
+          let [:x 1]
+            div "Test"
+        """,
+        'foo/bar', ':x',
+        'Even elements of',
+    )
+    check_error(
+        """
+        def foo/bar
+          let [x]
+            div "Test"
+        """,
+        'foo/bar', 'x',
+        'Variable does not have',
+    )
+
+
+def test_get_errors():
+    check_error(
+        """
+        def foo/bar
+          get x "y"
+        """,
+        'foo/bar', '"y"',
+        'Record field name should be specified by symbol',
+        {'x': Record[{'y': IntType}]},
+    )
+    check_error(
+        """
+        def foo/bar
+          get x z
+        """,
+        'foo/bar', 'x',
+        'Missing keys',
+        {'x': Record[{'y': IntType}]},
+    )
+
+
+def test_if_errors():
+    check_unify_error(
+        """
+        def foo/bar
+          if x "true"
+        """,
+        'foo/bar', 'x',
+        {'x': Record[{}]},
+    )
+    check_unify_error(
+        """
+        def foo/bar
+          if x "true" "false"
+        """,
+        'foo/bar', 'x',
+        {'x': Record[{}]},
+    )
+
+
+def test_each_errors():
+    check_error(
+        """
+        def foo/bar
+          each "a" x
+            div "Test"
+        """,
+        'foo/bar', '"a"',
+        'Variable name should be specified by symbol',
+        {'x': ListType[Record[{'y': IntType}]]},
+    )
+    check_unify_error(
+        """
+        def foo/bar
+          each a x
+            div "Test"
+        """,
+        'foo/bar', 'x',
+        {'x': IntType},
+    )
+
+
+def test_if_some_errors():
+    check_error(
+        """
+        def foo/bar
+          if-some {:x 1}
+            div "Test"
+        """,
+        'foo/bar', '{:x 1}',
+        'Variable binding should be specified by list',
+    )
+    check_error(
+        """
+        def foo/bar
+          if-some [x 1 2]
+            div "Test"
+        """,
+        'foo/bar', '[x 1 2]',
+        'Variable binding should be specified using list with',
+    )
+    check_error(
+        """
+        def foo/bar
+          if-some [:x 1]
+            div "Test"
+        """,
+        'foo/bar', ':x',
+        'Variable name should be specified by symbol',
+    )
+    check_error(
+        """
+        def foo/bar
+          if-some [x 1]
+            div "Test"
+        """,
+        'foo/bar', '1',
+        'if-some check is not necessary',
+        severity=WARNING,
+    )
+
+
+def test_expr_errors():
+    check_error(
+        """
+        def foo/bar
+          unknown "Test"
+        """,
+        'foo/bar', 'unknown',
+        'Unknown function name',
+    )
+    check_error(
+        """
+        def foo/bar
+          foo/baz
+
+        def foo/baz
+          foo/bar
+        """,
+        'foo/bar', 'foo/baz',
+        'Recursive call of the function',
+    )
+    check_error(
+        """
+        def foo/bar
+          if
+            div "Test"
+        """,
+        'foo/bar', 'if',
+        'Function signature mismatch',
+    )
+    check_unify_error(
+        """
+        def foo/bar
+          baz 1
+          baz "2"
+          baz 3
+        """,
+        'foo/bar', '"2"',
+        {'baz': Func[[IntType], IntType]},
     )
