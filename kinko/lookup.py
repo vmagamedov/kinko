@@ -122,6 +122,7 @@ class Lookup(object):
 
         first_line = source_lines[start_line]
         indent = len(first_line) - len(first_line.lstrip())
+        indent = min(indent, start.column - 1)
 
         if end_line - start_line > 2:
             snippet = ['  | ' + source_lines[start_line][indent:],
@@ -145,7 +146,7 @@ class Lookup(object):
             .format(
                 message=error.message,
                 file=source.file_path,
-                line_num=start_line,
+                line_num=start.line,
                 func_name=error.func.name or '<content>',
                 snippet='\n'.join('  ' + l for l in snippet),
             )

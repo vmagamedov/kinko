@@ -316,6 +316,11 @@ def test_join_location():
     check_location(src, d_fn, 12, 15, 'd 2')
 
 
+def test_invalid_indent():
+    check_error('a\n  "b"\n    "c"',
+                IMPLICIT_TUPLE_ERROR, 10, 12, '  ')
+
+
 def test_implicit_tuple_error():
     check_error('foo\n1\nbar',
                 IMPLICIT_TUPLE_ERROR, 4, 5, '1')

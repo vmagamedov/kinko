@@ -200,6 +200,9 @@ def tokenize(string, errors=None):
                             yield Token(Token.DEDENT, '', loc)
                         del indents[ident_pos+1:]
                 elif new_indent > cur_indent:
+                    size = new_indent - cur_indent
+                    loc = Location(Position(pos.offset - size, pos.line,
+                                            pos.column - size), pos)
                     indents.append(new_indent)
                     yield Token(Token.INDENT, '', loc)
                 break
