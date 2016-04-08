@@ -23,6 +23,14 @@ class Errors(object):
         self._stack = [None]
 
     @contextmanager
+    def module_ctx(self, module):
+        self._stack.append(Func(module, None))
+        try:
+            yield
+        finally:
+            self._stack.pop()
+
+    @contextmanager
     def func_ctx(self, module, name):
         self._stack.append(Func(module, name))
         try:

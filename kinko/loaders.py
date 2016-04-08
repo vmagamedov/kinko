@@ -9,10 +9,11 @@ class NamespaceNotFound(LookupError):
 
 class Source(object):
 
-    def __init__(self, name, content, modified_time):
+    def __init__(self, name, content, modified_time, file_path):
         self.name = name
         self.content = content
         self.modified_time = modified_time
+        self.file_path = file_path
 
 
 class LoaderBase(object):
@@ -42,8 +43,9 @@ class DictLoader(LoaderBase):
         return True
 
     def load(self, name):
+        file_path = '<memory:{}.kinko>'.format(name)
         try:
-            return Source(name, self._sources[name], None)
+            return Source(name, self._sources[name], None, file_path)
         except KeyError:
             raise NamespaceNotFound(name)
 
@@ -63,16 +65,16 @@ class FileSystemLoader(LoaderBase):
             return False
 
     def load(self, name):
-        file_name = os.path.join(self._path, self._template.format(name))
+        file_path = os.path.join(self._path, self._template.format(name))
         try:
-            with codecs.open(file_name, encoding=self._encoding) as f:
+            with codecs.open(file_path, encoding=self._encoding) as f:
                 content = f.read()
         except IOError as e:
             if e.errno not in (errno.ENOENT, errno.EISDIR, errno.EINVAL):
                 raise
             raise NamespaceNotFound(name)
-        modified_time = os.path.getmtime(file_name)
-        return Source(name, content, modified_time)
+        modified_time = os.path.getmtime(file_path)
+        return Source(name, content, modified_time, file_path)
 
 
 class DictCache(CacheBase):

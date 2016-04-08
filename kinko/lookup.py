@@ -1,15 +1,20 @@
+import logging
 from collections import namedtuple
 
 from .refs import extract
 from .nodes import NodeVisitor
 from .utils import Buffer
 from .parser import parse
+from .errors import UserError, WARNING, ERROR, Errors
 from .compat import _exec_in
 from .checker import def_types, split_defs, Environ, check, collect_defs
 from .checker import NamesResolver, NamesUnResolver
 from .loaders import DictCache
 from .tokenizer import tokenize
 from .compile.python import compile_module
+
+
+log = logging.getLogger(__name__)
 
 
 class DependenciesVisitor(NodeVisitor):
@@ -92,13 +97,78 @@ class Lookup(object):
         if name not in _visited:
             _visited.add(name)
             source = self._loader.load(name)
-            node = parse(list(tokenize(source.content)))
+
+            errors = Errors()
+            try:
+                with errors.module_ctx(name):
+                    node = parse(list(tokenize(source.content, errors)), errors)
+            except UserError as e:
+                self._raise_on_errors(errors, type(e))
+                raise
+
             node = NamesResolver(source.name).visit(node)
             dependencies = DependenciesVisitor.get_dependencies(node)
             yield ParsedSource(name, source.modified_time, node, dependencies)
             for dep in dependencies:
                 for item in self._load_sources(dep, _visited=_visited):
                     yield item
+
+    def _format_error(self, error):
+        source = self._loader.load(error.func.module)
+        source_lines = source.content.splitlines()
+
+        start, end = error.location.start, error.location.end
+        start_line, end_line = start.line - 1, end.line - 1
+
+        first_line = source_lines[start_line]
+        indent = len(first_line) - len(first_line.lstrip())
+
+        if end_line - start_line > 2:
+            snippet = ['  | ' + source_lines[start_line][indent:],
+                       ' ...',
+                       '  | ' + source_lines[end_line][indent:]]
+        elif end_line - start_line > 0:
+            snippet = ['  | ' + source_lines[l][indent:]
+                       for l in range(start_line, end_line + 1)]
+        else:
+            first_line_offset = sum(map(len, source_lines[:start_line])) + \
+                                start_line
+            highlight_indent = start.offset - first_line_offset - indent
+            highlight_len = end.offset - start.offset
+            highlight = (' ' * highlight_indent) + ('~' * highlight_len)
+            snippet = ['  ' + source_lines[start_line][indent:],
+                       '  ' + highlight]
+        return (
+            '{message}\n'
+            '  File "{file}", line {line_num}, in {func_name}\n'
+            '{snippet}'
+            .format(
+                message=error.message,
+                file=source.file_path,
+                line_num=start_line,
+                func_name=error.func.name or '<content>',
+                snippet='\n'.join('  ' + l for l in snippet),
+            )
+        )
+
+    def _raise_on_errors(self, errors, error_cls=None):
+        error_cls = UserError if error_cls is None else error_cls
+        errors_list = []
+        warnings_list = []
+        for e in errors.list:
+            msg = self._format_error(e)
+            if e.severity == WARNING:
+                warnings_list.append(msg)
+            elif e.severity == ERROR:
+                errors_list.append(msg)
+            else:
+                raise ValueError(repr(e.severity))
+
+        if warnings_list:
+            for msg in warnings_list:
+                log.warn(msg)
+        if errors_list:
+            raise error_cls('\n'.join(errors_list))
 
     def _check(self, parsed_sources):
         env = dict(self.types)
@@ -107,7 +177,12 @@ class Lookup(object):
         env.update(def_types(node))
 
         environ = Environ(env)
-        node = check(node, environ)
+        try:
+            node = check(node, environ)
+        except UserError as e:
+            self._raise_on_errors(environ.errors, type(e))
+        else:
+            self._raise_on_errors(environ.errors)
         reqs = extract(node)
 
         modules = {ns: NamesUnResolver(ns).visit(mod)
@@ -119,7 +194,7 @@ class Lookup(object):
         return checked_sources, reqs
 
     def _compile_module(self, name, module):
-        module_code = compile(module, '<kinko:{}>'.format(name), 'exec')
+        module_code = compile(module, '<{}.kinko>'.format(name), 'exec')
         globals_dict = {}
         _exec_in(module_code, globals_dict)
         return globals_dict
