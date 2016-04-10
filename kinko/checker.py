@@ -680,7 +680,14 @@ def check(node, env):
         return check_expr(node, env)
 
     elif isinstance(node, Symbol):
-        return node.clone_with(node.name, type=env[node.name])
+        try:
+            t = env[node.name]
+        except KeyError:
+            with env.errors.location(node.location):
+                raise TypeCheckError('Undefined variable {}'
+                                     .format(node.name))
+        else:
+            return node.clone_with(node.name, type=t)
 
     elif isinstance(node, Placeholder):
         return node.clone_with(node.name, type=env[node.name])

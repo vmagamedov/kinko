@@ -641,6 +641,17 @@ def test_def_errors():
     )
 
 
+def test_symbol_errors():
+    check_error(
+        """
+        def foo/bar
+          div x
+        """,
+        'foo/bar', 'x',
+        'Undefined variable',
+    )
+
+
 def test_let_errors():
     check_error(
         """
