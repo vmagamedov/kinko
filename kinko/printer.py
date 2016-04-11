@@ -141,3 +141,6 @@ class Printer(NodeVisitor):
 
     def visit_string(self, node):
         self._print(self._inline_printer.visit(node))
+
+    def visit_keyword(self, node):
+        self._print(self._inline_printer.visit(node))
