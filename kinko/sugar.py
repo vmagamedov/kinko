@@ -5,21 +5,46 @@ except ImportError:
     pass
 
 from .nodes import String, Symbol, Tuple, List, NodeTransformer, Placeholder
+from .tokenizer import Location, Position
+
 
 INTERPOLATION_RE = re.compile(r'\{[\w.-]+\}')
 
 
 def _interpolate_string(node):
-    kw = {'location': node.location}
+    line = node.location.start.line
     last_pos = 0
+    val_offset = node.location.start.offset + 1
+    val_column = node.location.start.column + 1
+
+    def _step(delta):
+        return Position(val_offset + delta, line,
+                        val_column + delta)
+
     for match in INTERPOLATION_RE.finditer(node.value):
         sym = match.group()[1:-1]
         if not all(sym.split('.')):
             continue
-        yield String(node.value[last_pos:match.start()], **kw)
-        yield Symbol(sym, **kw)
-        last_pos = match.end()
-    yield String(node.value[last_pos:], **kw)
+
+        m_start, m_end = match.span()
+
+        chunk = node.value[last_pos:m_start]
+        if chunk:
+            yield String(chunk,
+                         location=Location((_step(last_pos) if last_pos
+                                            else node.location.start),
+                                           _step(m_start)))
+
+        yield Symbol(sym, location=Location(_step(m_start + 1),
+                                            _step(m_end - 1)))
+        last_pos = m_end
+
+    tail = node.value[last_pos:]
+    if tail:
+        yield String(tail,
+                     location=Location((_step(last_pos) if last_pos
+                                        else node.location.start),
+                                       node.location.end))
 
 
 class InterpolateString(NodeTransformer):
@@ -30,7 +55,7 @@ class InterpolateString(NodeTransformer):
             kw = {'location': node.location}
             return Tuple([Symbol('join', **kw), List(nodes, **kw)], **kw)
         else:
-            return node
+            return nodes[0]
 
 
 def _translate_dots(node, node_cls):
