@@ -96,6 +96,18 @@ class TestInterpolateString(TestCase):
         )
         self.checkLocation(src, node.values[0].values[1], '"text"')
 
+    def testInterpolateEmptyString(self):
+        src = 'foo ""'
+        node = self.interpolate(parse_raw(src))
+        self.assertEqual(
+            node,
+            List([Tuple([
+                Symbol('foo'),
+                String(''),
+            ])]),
+        )
+        self.checkLocation(src, node.values[0].values[1], '""')
+
     def testInterpolateInvalid(self):
         self.assertEqual(
             self.interpolate(parse_raw('foo "before {.a} {b.} {a..b} {.} '

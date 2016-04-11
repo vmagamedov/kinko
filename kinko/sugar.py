@@ -40,7 +40,7 @@ def _interpolate_string(node):
         last_pos = m_end
 
     tail = node.value[last_pos:]
-    if tail:
+    if tail or not last_pos:
         yield String(tail,
                      location=Location((_step(last_pos) if last_pos
                                         else node.location.start),
