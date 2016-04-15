@@ -120,7 +120,7 @@ def render(path, name, output, types, result):
     from .lookup import Lookup
     from .loaders import FileSystemLoader
     from .typedef import load_types
-    from .readers.simple import loads
+    from .read.simple import loads
 
     types_ = load_types(types.read()) if types else {}
     result_ = loads(result.read()) if result else {}

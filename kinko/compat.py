@@ -2,6 +2,7 @@ import sys
 
 
 PY3 = sys.version_info[0] == 3
+PY35 = sys.version_info >= (3, 5)
 
 
 def with_metaclass(meta, *bases):
