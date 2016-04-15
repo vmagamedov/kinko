@@ -130,5 +130,24 @@ def render(path, name, output, types, result):
     output.write(fn.render(result_))
 
 
+@cli.command('frontend')
+@click.option('--bind', default='127.0.0.1:8080', show_default=True)
+@click.argument('base_url')
+@click.argument('ui_path', type=click.Path(exists=True, file_okay=False))
+def frontend(bind, base_url, ui_path):
+    """Run frontend server.
+
+    Frontend server talks with backend server via special API
+    to render UI using graph data from backend server. """
+    import logging
+    from .server import main
+
+    logging.basicConfig(level=logging.INFO)
+    logging.getLogger('aiohttp').setLevel(logging.WARNING)
+
+    host, _, port = bind.partition(':')
+    main(host, int(port), base_url, ui_path)
+
+
 if __name__ == '__main__':
     cli.main(prog_name='python -m kinko')
