@@ -67,6 +67,7 @@ class Context(SimpleContext):
     def __init__(self, lookup, result):
         self._lookup = lookup
         super(Context, self).__init__(result)
+        self.builtins = lookup.builtins
 
     def lookup(self, name):
         ns, _, fn_name = name.partition('/')
@@ -75,10 +76,11 @@ class Context(SimpleContext):
 
 class Lookup(object):
 
-    def __init__(self, types, loader, cache=None):
+    def __init__(self, types, loader, cache=None, builtins=None):
         self.types = types
         self._loader = loader
         self._cache = cache or DictCache()
+        self.builtins = builtins or {}
         self._namespaces = {}
         self._reqs = {}
 

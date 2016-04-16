@@ -113,7 +113,7 @@ class TestCompiler(TestCase):
             """,
             """
             ctx.buffer.write('<a href="')
-            ctx.buffer.write_unsafe(builtins.url-for('foo', bar='baz'))
+            ctx.buffer.write_unsafe(ctx.builtins['url-for']('foo', bar='baz'))
             ctx.buffer.write('"></a>')
             """,
             {'url-for': Func[[StringType, VarNamedArgs[StringType]],
@@ -187,15 +187,16 @@ class TestCompiler(TestCase):
         )
 
     def testLetExpression(self):
+        expr = "[ctx.builtins['add'](x, y) for (x, y) in [(1, 2)]][0]"
         self.assertCompiles(
             """
             div :class (let [x 1 y 2] (add x y))
             """,
             """
             ctx.buffer.write('<div class="')
-            ctx.buffer.write([builtins.add(x, y) for (x, y) in [(1, 2)]][0])
+            ctx.buffer.write({})
             ctx.buffer.write('"></div>')
-            """,
+            """.format(expr),
             {'add': Func[[IntType, IntType], IntType]},
         )
 
@@ -282,7 +283,7 @@ class TestCompiler(TestCase):
             x = ctx.result['foo']['bar']
             if (x is not None):
                 ctx.buffer.write('<h1>')
-                ctx.buffer.write(builtins.inc(x))
+                ctx.buffer.write(ctx.builtins['inc'](x))
                 ctx.buffer.write('</h1>')
             """,
             {'foo': Record[{'bar': Option[IntType]}],
@@ -290,7 +291,7 @@ class TestCompiler(TestCase):
         )
 
     def testIfSomeExpression(self):
-        expr = ("[(builtins.inc(x) if (x is not None) else None) "
+        expr = ("[(ctx.builtins['inc'](x) if (x is not None) else None) "
                 "for (x,) in [(ctx.result['foo']['bar'],)]][0]")
         self.assertCompiles(
             """
@@ -325,7 +326,8 @@ class TestCompiler(TestCase):
         )
 
     def testIfSomeElseExpression(self):
-        expr = ("[(builtins.inc(x) if (x is not None) else builtins.dec(x)) "
+        expr = ("[(ctx.builtins['inc'](x) if (x is not None) "
+                "else ctx.builtins['dec'](x)) "
                 "for (x,) in [(ctx.result['foo']['bar'],)]][0]")
         self.assertCompiles(
             """
@@ -361,7 +363,8 @@ class TestCompiler(TestCase):
         )
 
     def testIfSomeNamedElseExpression(self):
-        expr = ("[(builtins.inc(x) if (x is not None) else builtins.dec(x)) "
+        expr = ("[(ctx.builtins['inc'](x) if (x is not None) "
+                "else ctx.builtins['dec'](x)) "
                 "for (x,) in [(ctx.result['foo']['bar'],)]][0]")
         self.assertCompiles(
             """

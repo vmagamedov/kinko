@@ -229,8 +229,8 @@ def compile_func_expr(env, node, *norm_args):
     sym, args = node.values[0], node.values[1:]
     pos_args, kw_args = split_args(args)
 
-    name_expr = py.Attribute(py.Name('builtins', py.Load()),
-                             sym.name, py.Load())
+    builtins = py.Attribute(py.Name('ctx', py.Load()), 'builtins', py.Load())
+    name_expr = py.Subscript(builtins, py.Index(py.Str(sym.name)), py.Load())
 
     pos_arg_exprs = []
     for value in pos_args:
@@ -419,8 +419,10 @@ def compile_func_stmt(env, node, *norm_args):
                                              'lookup', py.Load()),
                                 [py.Str(sym.name)], [], None, None)
     else:
-        name_expr = py.Attribute(py.Name('builtins', py.Load()),
-                                 sym.name, py.Load())
+        builtins = py.Attribute(py.Name('ctx', py.Load()), 'builtins',
+                                py.Load())
+        name_expr = py.Subscript(builtins, py.Index(py.Str(sym.name)),
+                                 py.Load())
 
     kw_arg_exprs = []
     for key, (type_, value) in kw_args.items():
