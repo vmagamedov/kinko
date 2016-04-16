@@ -4,10 +4,10 @@ from collections import namedtuple
 from aiohttp import ClientSession
 from aiohttp.web import Application, Response, run_app
 
-from kinko.lookup import Lookup
-from kinko.loaders import FileSystemLoader
-from kinko.typedef import load_types
-from kinko.read.simple import loads
+from .lookup import Lookup
+from .loaders import FileSystemLoader
+from .typedef import load_types
+from .read.simple import loads
 
 
 ResolveResult = namedtuple('ResolveResult', 'status endpoint')
@@ -104,10 +104,13 @@ async def request_handler(request):
                     headers={'Content-Type': 'text/html'})
 
 
-def main(host, port, base_url, ui_path):
+def main(host, port, base_url, ui_path, static_path):
     app = Application()
     app['BASE_URL'] = base_url
     app['UI_PATH'] = ui_path
+
+    if static_path:
+        app.router.add_static('/static', static_path)
 
     app.router.add_route('GET', '/', request_handler)
     app.router.add_route('GET', '/{path:.+}', request_handler)
