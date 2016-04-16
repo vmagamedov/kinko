@@ -1,9 +1,11 @@
+import uuid
 from logging import getLogger
 from collections import namedtuple
 
 from aiohttp import ClientSession
 from aiohttp.web import Application, Response, run_app
 
+from .types import Func, StringType
 from .lookup import Lookup
 from .loaders import FileSystemLoader
 from .typedef import load_types
@@ -14,9 +16,24 @@ ResolveResult = namedtuple('ResolveResult', 'status endpoint')
 
 log = getLogger(__name__)
 
+STATIC_PREFIX = uuid.uuid4().hex
+
 
 def current_url(request):
     return '{}://{}{}'.format(request.scheme, request.host, request.path_qs)
+
+
+def static_url(path):
+    return '/{}/{}'.format(STATIC_PREFIX, path)
+
+
+TYPES = {
+    'static-url': Func[[StringType], StringType],
+}
+
+BUILTINS = {
+    'static-url': static_url,
+}
 
 
 class Backend(object):
@@ -34,7 +51,9 @@ class Backend(object):
             async with session.get(url) as resp:
                 if resp.status == 200:
                     data = await resp.read()
-                    return load_types(data.decode('utf-8'))
+                    types = load_types(data.decode('utf-8'))
+                    types.update(TYPES)
+                    return types
                 else:
                     raise Exception(repr(resp))
 
@@ -80,7 +99,7 @@ async def get_lookup(app):
         backend = get_backend(app)
         types = await backend.types()
         loader = FileSystemLoader(app['UI_PATH'])
-        lookup = app['_lookup'] = Lookup(types, loader)
+        lookup = app['_lookup'] = Lookup(types, loader, builtins=BUILTINS)
     return lookup
 
 
@@ -110,7 +129,7 @@ def main(host, port, base_url, ui_path, static_path):
     app['UI_PATH'] = ui_path
 
     if static_path:
-        app.router.add_static('/static', static_path)
+        app.router.add_static('/{}'.format(STATIC_PREFIX), static_path)
 
     app.router.add_route('GET', '/', request_handler)
     app.router.add_route('GET', '/{path:.+}', request_handler)
