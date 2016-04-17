@@ -3,7 +3,7 @@ from logging import getLogger
 from collections import namedtuple
 
 from aiohttp import ClientSession
-from aiohttp.web import Application, Response, run_app
+from aiohttp.web import Application, Response, run_app, HTTPException
 
 from .types import Func, StringType
 from .lookup import Lookup
@@ -123,8 +123,32 @@ async def request_handler(request):
                     headers={'Content-Type': 'text/html'})
 
 
+ERROR_TEMPLATE = """
+<!DOCTYPE html>
+<html><body><pre>{}.{}: {}</pre></body></html>
+"""
+
+
+async def error_middleware(app, handler):
+    async def middleware(request):
+        try:
+            resp = await handler(request)
+        except HTTPException:
+            raise
+        except Exception as e:
+            log.exception('Error handling request')
+            text = ERROR_TEMPLATE.format(type(e).__module__,
+                                         type(e).__name__, str(e))
+            return Response(text=text,
+                            status=500,
+                            headers={'Content-Type': 'text/html'})
+        else:
+            return resp
+    return middleware
+
+
 def main(host, port, base_url, ui_path, static_path):
-    app = Application()
+    app = Application(middlewares=[error_middleware])
     app['BASE_URL'] = base_url
     app['UI_PATH'] = ui_path
 
