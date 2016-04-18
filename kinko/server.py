@@ -19,6 +19,7 @@ ResolveResult = namedtuple('ResolveResult', 'status endpoint')
 log = getLogger(__name__)
 
 STATIC_PREFIX = uuid.uuid4().hex
+STATIC_URL_TYPE = Func[[StringType], StringType]
 
 
 def current_url(request):
@@ -27,15 +28,6 @@ def current_url(request):
 
 def static_url(path):
     return '/{}/{}'.format(STATIC_PREFIX, path)
-
-
-TYPES = {
-    'static-url': Func[[StringType], StringType],
-}
-
-BUILTINS = {
-    'static-url': static_url,
-}
 
 
 class Backend(object):
@@ -54,7 +46,6 @@ class Backend(object):
                 if resp.status == 200:
                     data = await resp.read()
                     types = load_types(data.decode('utf-8'))
-                    types.update(TYPES)
                     return types
                 else:
                     raise Exception(repr(resp))
@@ -100,8 +91,10 @@ async def get_lookup(app):
     if lookup is None:
         backend = get_backend(app)
         types = await backend.types()
+        types.update(app['TYPES'])
         loader = FileSystemLoader(app['UI_PATH'])
-        lookup = app['_lookup'] = Lookup(types, loader, builtins=BUILTINS)
+        lookup = app['_lookup'] = Lookup(types, loader,
+                                         builtins=app['BUILTINS'])
     return lookup
 
 
@@ -154,7 +147,7 @@ async def error_middleware(app, handler):
     return middleware
 
 
-def main(host, port, base_url, ui_path, static_path, debug=True):
+def main(host, port, base_url, ui_path, static_path=None, debug=True):
     base_url += ('/' if not base_url.endswith('/') else '')
     middlewares = [error_middleware] if debug else []
 
@@ -162,7 +155,11 @@ def main(host, port, base_url, ui_path, static_path, debug=True):
     app['BASE_URL'] = base_url
     app['UI_PATH'] = ui_path
 
+    types = app['TYPES'] = {}
+    builtins = app['BUILTINS'] = {}
     if static_path:
+        types['static-url'] = STATIC_URL_TYPE
+        builtins['static-url'] = static_url
         app.router.add_static('/{}'.format(STATIC_PREFIX), static_path)
 
     app.router.add_route('GET', '/', request_handler)
