@@ -1,5 +1,7 @@
 import uuid
+from html import escape
 from logging import getLogger
+from traceback import format_exc
 from collections import namedtuple
 
 from aiohttp import ClientSession
@@ -46,7 +48,7 @@ class Backend(object):
         return self.base_url + path
 
     async def types(self):
-        url = self._url('types.kinko')
+        url = self._url('types')
         with ClientSession(loop=self.loop) as session:
             async with session.get(url) as resp:
                 if resp.status == 200:
@@ -125,7 +127,10 @@ async def request_handler(request):
 
 ERROR_TEMPLATE = """
 <!DOCTYPE html>
-<html><body><pre>{}.{}: {}</pre></body></html>
+<html><body>
+<p><pre>{}.{}: {exc}</pre></p>
+<p><small><pre>{tb}</pre></small></p>
+</body></html>
 """
 
 
@@ -138,7 +143,9 @@ async def error_middleware(app, handler):
         except Exception as e:
             log.exception('Error handling request')
             text = ERROR_TEMPLATE.format(type(e).__module__,
-                                         type(e).__name__, str(e))
+                                         type(e).__name__,
+                                         exc=escape(str(e)),
+                                         tb=escape(format_exc()))
             return Response(text=text,
                             status=500,
                             headers={'Content-Type': 'text/html'})
@@ -147,8 +154,11 @@ async def error_middleware(app, handler):
     return middleware
 
 
-def main(host, port, base_url, ui_path, static_path):
-    app = Application(middlewares=[error_middleware])
+def main(host, port, base_url, ui_path, static_path, debug=True):
+    base_url += ('/' if not base_url.endswith('/') else '')
+    middlewares = [error_middleware] if debug else []
+
+    app = Application(middlewares=middlewares)
     app['BASE_URL'] = base_url
     app['UI_PATH'] = ui_path
 
