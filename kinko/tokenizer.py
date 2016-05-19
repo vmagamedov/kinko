@@ -247,7 +247,10 @@ def tokenize(string, errors=None):
                                          .format(ch))
             yield Token(BRACKET_TYPES[ch], ch, char_iter.location_from(pos))
         else:
-            with errors.location(char_iter.location_from(pos)):
+            # not using location_from to handle properly newline character
+            loc = Location(pos, pos._replace(offset=pos.offset+1,
+                                             column=pos.column+1))
+            with errors.location(loc):
                 raise TokenizerError("Wrong character {!r}".format(ch))
     else:
         eof_pos = char_iter.location_from(char_iter.next_position)

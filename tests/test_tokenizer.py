@@ -33,7 +33,7 @@ def check_tokens(string, reference):
 def check_errors(string, messages):
     errors = Errors()
     try:
-        list(tokenize(string, errors))
+        list(_tokenize(string, errors))
     except TokenizerError:
         errors_set = {
             (e.message, e.location.start.offset, e.location.end.offset)
