@@ -1,5 +1,6 @@
-from kinko.query import Edge, Field, Link
 from kinko.refs import ArgRef, RefsCollector, FieldRef, ItemRef, extract
+from kinko.refs import type_to_query
+from kinko.query import Edge, Field, Link
 from kinko.nodes import Symbol
 from kinko.types import StringType, Record, IntType, Func, ListType, TypeVar
 from kinko.checker import check, Environ
@@ -21,6 +22,17 @@ class TestRefs(TestCase):
         refs_collector = RefsCollector()
         refs_collector.visit(node)
         return node, refs_collector.refs
+
+    def testTypeToQuery(self):
+        with query_eq_patcher():
+            self.assertEqual(
+                type_to_query(Record[{
+                    'foo': StringType,
+                    'bar': ListType[Record[{'baz': IntType}]]
+                }]),
+                Edge([Field('foo'),
+                      Link('bar', Edge([Field('baz')]))]),
+            )
 
     def testEnv(self):
         node, refs = self.getRefs(
