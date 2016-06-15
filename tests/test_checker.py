@@ -529,6 +529,34 @@ def test_if_some_named_else():
     )
 
 
+def test_if_some_arg():
+    inc_type = Func[[IntType], IntType]
+    foo_type1 = None  # to simulate TypeVar[None]
+    foo_type2 = Record[{'bar': Option[IntType]}]
+    env = {'inc': inc_type, 'foo': foo_type1}
+    check_expr_type(
+        """
+        if-some [x #foo.bar] (inc x)
+        """,
+        Tuple.typed(Option[IntType], [
+            Symbol.typed(IF_SOME1_TYPE, 'if-some'),
+            List([
+                Symbol('x'),
+                Tuple.typed(Option[IntType], [
+                    Symbol.typed(GET_TYPE, 'get'),
+                    Placeholder.typed(foo_type2, 'foo'),
+                    Symbol('bar'),
+                ]),
+            ]),
+            Tuple.typed(IntType, [
+                Symbol.typed(inc_type, 'inc'),
+                Symbol.typed(IntType, 'x'),
+            ]),
+        ]),
+        env,
+    )
+
+
 def test_each():
     inc_type = Func[[IntType], IntType]
     rec_type = Record[{'attr': IntType}]

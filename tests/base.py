@@ -21,8 +21,10 @@ except ImportError:
 
 from kinko.refs import Reference
 from kinko.nodes import Node
-from kinko.types import GenericMeta, TypeVarMeta
+from kinko.types import GenericMeta, TypeVarMeta, UnionMeta
 from kinko.query import Field, Edge, Link
+from kinko.checker import prune
+
 
 Mock = _Mock
 
@@ -76,6 +78,9 @@ def _strict_type_eq(self, other):
 def _type_eq(self, other):
     if isinstance(self, TypeVarMeta) and self.__instance__ is not None:
         return _type_eq(self.__instance__, other)
+    if isinstance(self, UnionMeta) and type(self) is type(other):
+        pruned_types = {prune(v) for v in self.__types__}
+        return pruned_types == other.__types__
     return _strict_type_eq(self, other)
 
 

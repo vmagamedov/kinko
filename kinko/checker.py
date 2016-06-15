@@ -564,11 +564,15 @@ def _check_if_some_bind(env, bind):
         Nothing in bind_expr_type.__types__
     ):
         inner_expr_type = Union[bind_expr_type.__types__ - {Nothing}]
-    else:
+    elif bind_expr_type is not None:
         env.errors.warn(bind_expr.location,
                         'if-some check is not necessary, expression type '
                         'is not optional')
         inner_expr_type = bind_expr_type
+    else:
+        type_var = TypeVar[None]
+        unify(bind_expr.__type__, Option[type_var])
+        inner_expr_type = type_var
     return bind_sym, bind_expr, inner_expr_type
 
 
