@@ -135,7 +135,8 @@ def render(path, name, output, types, result):
 @click.argument('base_url')
 @click.argument('ui_path', type=click.Path(exists=True, file_okay=False))
 @click.option('--static', type=click.Path(exists=True, file_okay=False))
-def frontend(bind, base_url, ui_path, static):
+@click.option('--extend', multiple=True)
+def frontend(bind, base_url, ui_path, static, extend):
     """Run frontend server.
 
     Frontend server talks with backend server via special API
@@ -147,7 +148,8 @@ def frontend(bind, base_url, ui_path, static):
     logging.getLogger('aiohttp').setLevel(logging.WARNING)
 
     host, _, port = bind.partition(':')
-    main(host, int(port), base_url, ui_path, static)
+    main(host, int(port), base_url, ui_path, static,
+         extensions=extend)
 
 
 if __name__ == '__main__':

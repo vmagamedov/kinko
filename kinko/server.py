@@ -7,6 +7,7 @@ from collections import namedtuple
 from aiohttp import ClientSession
 from aiohttp.web import Application, Response, run_app, HTTPException
 
+from .ext import load_extensions
 from .types import Func, StringType
 from .lookup import Lookup
 from .loaders import FileSystemLoader
@@ -90,11 +91,17 @@ async def get_lookup(app):
     lookup = app.get('_lookup', None)
     if lookup is None:
         backend = get_backend(app)
+        extensions = app['EXTENSIONS']
+
         types = await backend.types()
         types.update(app['TYPES'])
+        types.update({f.__defn_name__: f.__defn_type__ for f in extensions})
+
+        builtins = app['BUILTINS']
+        builtins.update({f.__defn_name__: f for f in extensions})
+
         loader = FileSystemLoader(app['UI_PATH'])
-        lookup = app['_lookup'] = Lookup(types, loader,
-                                         builtins=app['BUILTINS'])
+        lookup = app['_lookup'] = Lookup(types, loader, builtins=builtins)
     return lookup
 
 
@@ -147,13 +154,15 @@ async def error_middleware(app, handler):
     return middleware
 
 
-def main(host, port, base_url, ui_path, static_path=None, debug=True):
+def main(host, port, base_url, ui_path, static_path=None, debug=True,
+         extensions=None):
     base_url += ('/' if not base_url.endswith('/') else '')
     middlewares = [error_middleware] if debug else []
 
     app = Application(middlewares=middlewares)
     app['BASE_URL'] = base_url
     app['UI_PATH'] = ui_path
+    app['EXTENSIONS'] = load_extensions(extensions or [])
 
     types = app['TYPES'] = {}
     builtins = app['BUILTINS'] = {}
