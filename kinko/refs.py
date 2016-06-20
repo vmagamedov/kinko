@@ -102,6 +102,9 @@ def type_to_query(type_):
         elif isinstance(f_type, ListTypeMeta):
             if isinstance(f_type.__item_type__, RecordMeta):
                 fields.append(Link(f_name, type_to_query(f_type.__item_type__)))
+            elif isinstance(f_type.__item_type__, TypeVarMeta) and \
+                    f_type.__item_type__.__instance__ is None:
+                fields.append(Link(f_name, Edge([])))
             else:
                 raise NotImplementedError
         else:
