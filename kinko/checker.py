@@ -2,7 +2,7 @@ from itertools import chain
 from contextlib import contextmanager
 from collections import namedtuple, deque, defaultdict
 
-from .refs import ArgRef, FieldRef, ItemRef, Reference, is_from_arg
+from .refs import ArgRef, FieldRef, ItemRef, Reference, is_from_arg, CtxRef
 from .nodes import Tuple, Number, Keyword, String, List, Symbol, Placeholder
 from .nodes import NodeVisitor, NodeTransformer
 from .types import IntType, NamedArgMeta, StringType, ListType, VarArgsMeta
@@ -57,7 +57,7 @@ class Environ(object):
                 return type_
             else:
                 var = TypeVar[type_]
-                var.__backref__ = FieldRef(None, key)
+                var.__backref__ = CtxRef(key)
                 return var
 
     def __contains__(self, key):
@@ -454,7 +454,7 @@ def arg_var(name):
 
 def ctx_var(t, name):
     v = TypeVar[t]
-    v.__backref__ = FieldRef(None, name)
+    v.__backref__ = CtxRef(name)
     return v
 
 

@@ -30,10 +30,7 @@ class FieldRef(Reference):
         self.name = name
 
     def __repr__(self):
-        if self.backref:
-            return '{!r} > [{!r}]'.format(self.backref, self.name)
-        else:
-            return 'ctx > [{!r}]'.format(self.name)
+        return '{!r} > [{!r}]'.format(self.backref, self.name)
 
 
 class ArgRef(Reference):
@@ -44,6 +41,16 @@ class ArgRef(Reference):
 
     def __repr__(self):
         return "#{}".format(self.name)
+
+
+class CtxRef(Reference):
+
+    def __init__(self, name):
+        super(CtxRef, self).__init__(None)
+        self.name = name
+
+    def __repr__(self):
+        return 'ctx[{!r}]'.format(self.name)
 
 
 def get_origin(obj):
@@ -58,6 +65,10 @@ def get_origin(obj):
 
 def is_from_arg(ref):
     return isinstance(get_origin(ref), ArgRef)
+
+
+def is_from_ctx(ref):
+    return isinstance(get_origin(ref), CtxRef)
 
 
 def get_type(type_):
@@ -75,7 +86,7 @@ def ref_to_req(var, add_req=None):
     inst = get_type(var.__instance__)
 
     if isinstance(inst, RecordMeta):
-        if isinstance(ref, FieldRef):
+        if isinstance(ref, (FieldRef, CtxRef)):
             edge = Edge([]) if add_req is None else add_req
             return ref_to_req(ref.backref, Edge([Link(ref.name, edge)]))
         else:
@@ -83,13 +94,13 @@ def ref_to_req(var, add_req=None):
 
     elif isinstance(inst, ListTypeMeta):
         item_type = get_type(inst.__item_type__)
-        assert isinstance(ref, FieldRef), type(ref)
+        assert isinstance(ref, (FieldRef, CtxRef)), type(ref)
         assert isinstance(item_type, RecordMeta), type(item_type)
         edge = Edge([]) if add_req is None else add_req
         return ref_to_req(ref.backref, Edge([Link(ref.name, edge)]))
 
     else:
-        assert isinstance(ref, FieldRef), type(ref)
+        assert isinstance(ref, (FieldRef, CtxRef)), type(ref)
         assert add_req is None, repr(add_req)
         return ref_to_req(ref.backref, Edge([Field(ref.name)]))
 
@@ -115,7 +126,7 @@ def type_to_query(type_):
 def node_ref(node):
     node_type = getattr(node, '__type__', None)
     if isinstance(node_type, TypeVarMeta) and node_type.__backref__:
-        if not is_from_arg(node_type.__backref__):
+        if is_from_ctx(node_type.__backref__):
             return node_type
 
 

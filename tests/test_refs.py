@@ -1,17 +1,14 @@
-from kinko.refs import ArgRef, RefsCollector, FieldRef, ItemRef, extract
+from kinko.refs import ArgRef, RefsCollector, FieldRef, ItemRef, extract, CtxRef
 from kinko.refs import type_to_query
 from kinko.query import Edge, Field, Link
 from kinko.nodes import Symbol
 from kinko.types import StringType, Record, IntType, Func, ListType, TypeVar
-from kinko.checker import check, Environ
+from kinko.utils import VarsGen
+from kinko.checker import check, Environ, ctx_var
 
 from .base import REF_EQ_PATCHER, NODE_EQ_PATCHER, query_eq_patcher
 from .base import STRICT_TYPE_EQ_PATCHER
 from .test_parser import parse
-
-
-def ctx_var(name):
-    return FieldRef(None, name)
 
 
 def check_eq(first, second):
@@ -52,8 +49,7 @@ def test_env():
         {'var': StringType},
     )
     var = node.values[0].values[2].values[1]
-    var_type = TypeVar[StringType]
-    var_type.__backref__ = ctx_var('var')
+    var_type = ctx_var(StringType, 'var')
     check_eq(var, Symbol.typed(var_type, 'var'))
 
 
@@ -69,8 +65,7 @@ def test_get():
     var_attr = node.values[0].values[2].values[1]
     var = var_attr.values[1]
 
-    var_type = TypeVar[Record[{'attr': StringType}]]
-    var_type.__backref__ = ctx_var('var')
+    var_type = ctx_var(Record[{'attr': StringType}], 'var')
     check_eq(var.__type__, var_type)
 
     var_attr_type = TypeVar[StringType]
@@ -111,11 +106,36 @@ def test_each():
     each_r = each.values[1]
     each_col = each.values[2]
     r_attr = each.values[3].values[1]
-    check_eq(each_col.__type__.__backref__, ctx_var('col'))
+    check_eq(each_col.__type__.__backref__, CtxRef('col'))
     check_eq(each_r.__type__.__backref__,
              ItemRef(each_col.__type__))
     check_eq(r_attr.__type__.__backref__,
              FieldRef(each_r.__type__, 'attr'))
+
+
+def test_type_wrap():
+    var = VarsGen()
+    node, refs = get_refs(
+        """
+        def foo
+          each r (wrap col)
+            inc r.item.attr
+        """,
+        {'col': ListType[Record[{'attr': IntType}]],
+         'inc': Func[[IntType], IntType],
+         'wrap': Func[[ListType[var.col]],
+                      ListType[Record[{'item': var.col}]]]},
+    )
+    # FIXME: fix r reference
+    # each = node.values[0].values[2]
+    # each_r = each.values[1]
+    # wrap_col = each.values[2]
+    # check_eq(each_r.__type__.__backref__,
+    #          ItemRef(wrap_col.__type__))
+    with query_eq_patcher():
+        check_eq(extract(node), {
+            'foo': Edge([Link('col', Edge([Field('attr')]))]),
+        })
 
 
 def test_requirements():
