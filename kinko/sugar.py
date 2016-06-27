@@ -4,8 +4,14 @@ try:
 except ImportError:
     pass
 
-from .nodes import String, Symbol, Tuple, List, NodeTransformer, Placeholder
+from .nodes import String, Symbol, Tuple, List, Placeholder
+from .nodes import NodeVisitor, NodeTransformer
+from .errors import UserError
 from .tokenizer import Location, Position
+
+
+class TransformError(UserError):
+    pass
 
 
 INTERPOLATION_RE = re.compile(r'\{[\w.-]+\}')
@@ -60,12 +66,7 @@ class InterpolateString(NodeTransformer):
 
 def _translate_dots(node, node_cls):
     kw = {'location': node.location}
-    head, sep, tail = node.name.partition('/')
-    if sep:
-        parts = tail.split('.')
-        path = [head + sep + parts[0]] + parts[1:]
-    else:
-        path = head.split('.')
+    path = [node.name] if '/' in node.name else node.name.split('.')
 
     def reducer(value, attr):
         return Tuple([Symbol('get', **kw), value, Symbol(attr, **kw)], **kw)
@@ -73,7 +74,26 @@ def _translate_dots(node, node_cls):
     return reduce(reducer, path[1:], node_cls(path[0], **kw))
 
 
+class _TupleFirstValueValidator(NodeVisitor):
+
+    def __init__(self, errors):
+        self.errors = errors
+
+    def visit_symbol(self, node):
+        if not node.ns and '.' in node.name:
+            with self.errors.location(node.location):
+                raise TransformError('Symbol in this position should not '
+                                     'contain dots')
+
+
 class TranslateDots(NodeTransformer):
+
+    def __init__(self, errors):
+        self.validator = _TupleFirstValueValidator(errors)
+
+    def visit_tuple(self, node):
+        self.validator.visit(node.values[0])
+        return super(TranslateDots, self).visit_tuple(node)
 
     def visit_symbol(self, node):
         return _translate_dots(node, Symbol)

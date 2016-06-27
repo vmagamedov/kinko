@@ -65,7 +65,7 @@ def test_symbol():
     assert Symbol('foo/bar').rel == 'bar'
     assert Symbol('foo/bar').name == 'foo/bar'
     check_parse(
-        'print foo foo.bar foo.bar.baz foo/bar.baz ./foo.bar',
+        'print foo foo.bar foo.bar.baz ./foo',
         List([
             Tuple([Symbol('print'),
                    Symbol('foo'),
@@ -75,10 +75,7 @@ def test_symbol():
                           Tuple([Symbol('get'),
                                  Symbol('foo'), Symbol('bar')]),
                           Symbol('baz')]),
-                   Tuple([Symbol('get'),
-                          Symbol('foo/bar'), Symbol('baz')]),
-                   Tuple([Symbol('get'),
-                          Symbol('./foo'), Symbol('bar')])]),
+                   Symbol('./foo')]),
         ]),
     )
 

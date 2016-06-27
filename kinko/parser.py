@@ -208,5 +208,5 @@ def parse(tokens, errors=None):
                              .format(msg, token.type))
     else:
         node = InterpolateString().visit(node)
-        node = TranslateDots().visit(node)
+        node = TranslateDots(errors).visit(node)
         return node

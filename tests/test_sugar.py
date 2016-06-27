@@ -1,5 +1,6 @@
 from kinko.nodes import Tuple, Symbol, List, String
-from kinko.sugar import InterpolateString
+from kinko.sugar import InterpolateString, TranslateDots, TransformError
+from kinko.errors import Errors
 
 from .base import NODE_EQ_PATCHER
 from .test_parser import parse, parse_raw
@@ -7,6 +8,10 @@ from .test_parser import parse, parse_raw
 
 def interpolate(node):
     return InterpolateString().visit(node)
+
+
+def translate(node, errors):
+    return TranslateDots(errors).visit(node)
 
 
 def check_eq(first, second):
@@ -17,6 +22,20 @@ def check_eq(first, second):
 def check_location(src, node, fragment):
     a, b = node.location.start.offset, node.location.end.offset
     assert src[a:b] == fragment
+
+
+def check_error(src, msg, fragment):
+    errors = Errors()
+    try:
+        translate(parse_raw(src), errors),
+    except TransformError:
+        error, = errors.list
+        assert error.message.startswith(msg)
+        start = error.location.start.offset
+        end = error.location.end.offset
+        assert src[start:end] == fragment
+    else:
+        raise AssertionError('Error not raised')
 
 
 def test_interpolate():
@@ -141,7 +160,7 @@ def test_interpolate_invalid():
     )
 
 
-def test_parser():
+def test_parser_interpolate():
     node = parse("""
     foo
       "bar {value} baz"
@@ -159,3 +178,8 @@ def test_parser():
             ]),
         ]),
     )
+
+
+def test_translate_dots_invalid():
+    check_error('foo\n  bar.baz', 'Symbol in this position',
+                'bar.baz')
