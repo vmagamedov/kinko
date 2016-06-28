@@ -1,0 +1,72 @@
+- !Image
+  name: base
+  repository: reg.local/kinko/base
+  provision-with: !Dockerfile
+
+- !Image
+  name: py27
+  from: !DockerImage python:2-alpine
+  repository: reg.local/kinko/py27
+  provision-with: !AnsibleTasks
+    - apk: name=build-base,libxslt-dev,libxml2-dev update_cache=yes
+    - pip: name={{item.pkg}} version={{item.ver}}
+      with_items:
+        # Kinko deps
+        - { pkg: funcparserlib, ver: 0.3.6 }
+        - { pkg: astor, ver: 0.5 }
+        - { pkg: markupsafe, ver: 0.23 }
+        # Kinko optional deps
+        - { pkg: lxml, ver: 3.6.0 }
+        - { pkg: slimit, ver: 0.8.1 }
+        # test suite deps
+        - { pkg: mock, ver: 2.0.0 }
+        - { pkg: pytest, ver: 2.9.1 }
+        - { pkg: flake8, ver: 3.0.0b1 }
+    - pip: name=https://github.com/vmagamedov/hiku/archive/790cdae.zip
+
+- !Image
+  name: py34
+  from: base
+  repository: reg.local/kinko/py34
+  provision-with: !AnsibleTasks
+    # System deps
+    - apt_repository: repo='deb http://ppa.launchpad.net/fkrull/deadsnakes/ubuntu xenial main'
+    - apt_repository: repo='deb-src http://ppa.launchpad.net/fkrull/deadsnakes/ubuntu xenial main'
+    - apt_key: keyserver=keyserver.ubuntu.com id=FF3997E83CD969B409FB24BC5BB92C09DB82666C
+    - apt: update_cache=yes
+    - apt: name={{item}}
+      with_items:
+        - build-essential
+        - libxslt1-dev
+        - libxml2-dev
+        - python3.4
+        - python3.4-dev
+        - zlib1g-dev
+        - curl
+    - raw: curl -L https://bootstrap.pypa.io/get-pip.py | python3.4 -
+    - raw: rm -rf /var/lib/apt/lists/*
+    # Python deps
+    - pip: name={{item.pkg}} version={{item.ver}}
+      with_items:
+        # Kinko deps
+        - { pkg: funcparserlib, ver: 0.3.6 }
+        - { pkg: astor, ver: 0.5 }
+        - { pkg: markupsafe, ver: 0.23 }
+        # Kinko optional deps
+        - { pkg: lxml, ver: 3.6.0 }
+        - { pkg: slimit, ver: 0.8.1 }
+        # test suite deps
+        - { pkg: mock, ver: 2.0.0 }
+        - { pkg: pytest, ver: 2.9.1 }
+        - { pkg: flake8, ver: 3.0.0b1 }
+    - pip: name=https://github.com/vmagamedov/hiku/archive/790cdae.zip
+
+- !ShellCommand
+  name: test py27
+  image: py27
+  shell: py.test -q --tb=native
+
+- !ShellCommand
+  name: test py34
+  image: py34
+  shell: py.test -q --tb=native
