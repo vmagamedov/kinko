@@ -61,12 +61,12 @@
         - { pkg: flake8, ver: 3.0.0b1 }
     - pip: name=https://github.com/vmagamedov/hiku/archive/790cdae.zip
 
-- !ShellCommand
+- !SubCommand
   name: test py27
   image: py27
-  shell: py.test -q --tb=native
+  call: py.test -q --tb=native
 
-- !ShellCommand
+- !SubCommand
   name: test py34
   image: py34
-  shell: py.test -q --tb=native
+  call: py.test -q --tb=native

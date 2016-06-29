@@ -7,7 +7,7 @@ import astor
 
 from .. import compat_ast as py
 from ..types import NamedArgMeta, VarArgsMeta, VarNamedArgsMeta, UnionMeta
-from ..types import StringTypeMeta
+from ..types import StringTypeMeta, NothingMeta
 from ..nodes import String, Tuple, Symbol, List, Number, Placeholder
 from ..nodes import NodeVisitor
 from ..utils import Environ, split_args, normalize_args
@@ -28,11 +28,31 @@ def _contains_string(type_):
     return recur_check(type_)
 
 
+def _contains_optional(type_):
+    def recur_check(t):
+        if isinstance(t, UnionMeta):
+            return any(recur_check(st) for st in t.__types__)
+        else:
+            return isinstance(t, NothingMeta)
+    return recur_check(type_)
+
+
 def _write(value, node=None):
-    safe = isinstance(value, py.Str)
-    if not safe and node is not None:
-        safe = not _contains_string(get_type(node))
-    write_method = 'write' if safe else 'write_unsafe'
+    safe = isinstance(value, py.Str) or \
+           (node is not None and not _contains_string(get_type(node)))
+    optional = _contains_optional(get_type(node)) if node is not None else False
+
+    if safe:
+        if not optional:
+            write_method = 'write'
+        else:
+            write_method = 'write_optional'
+    else:
+        if not optional:
+            write_method = 'write_unsafe'
+        else:
+            write_method = 'write_optional_unsafe'
+
     buffer = py.Attribute(py.Name('ctx', py.Load()), 'buffer', py.Load())
     return py.Expr(py.Call(py.Attribute(buffer, write_method, py.Load()),
                            [value], [], None, None))

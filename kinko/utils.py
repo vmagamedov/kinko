@@ -20,6 +20,14 @@ class Buffer(object):
     def write_unsafe(self, s):
         self.stack[-1].write(escape(s))
 
+    def write_optional(self, s):
+        if s is not None:
+            self.stack[-1].write(text_type(s))
+
+    def write_optional_unsafe(self, s):
+        if s is not None:
+            self.stack[-1].write(escape(s))
+
     def push(self):
         self.stack.append(io.StringIO())
 

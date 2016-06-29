@@ -5,7 +5,7 @@ import difflib
 from textwrap import dedent
 
 from kinko.types import StringType, ListType, VarNamedArgs, Func, Record, Option
-from kinko.types import IntType, Union, Markup, NamedArg
+from kinko.types import IntType, Union, Markup, NamedArg, BoolType
 from kinko.compat import _exec_in, PY3, text_type_name
 from kinko.lookup import SimpleContext
 from kinko.checker import check, Environ, NamesResolver, def_types
@@ -31,7 +31,7 @@ class TestCompiler(TestCase):
 
     def assertCompiles(self, src, code, env=None):
         node = parse(src)
-        node = check(node, Environ(env or {}))
+        node = check(node, Environ(env))
         mod = compile_module(node)
         try:
             compile(mod, '<kinko-template>', 'exec')
@@ -40,6 +40,21 @@ class TestCompiler(TestCase):
             raise
         else:
             self.compareSources(dumps(mod), code)
+
+    def assertRenders(self, src, content, context=None, env=None):
+        node = parse(src)
+        node = check(node, Environ(env))
+        mod = compile_module(node)
+        mod_code = compile(mod, '<kinko-template>', 'exec')
+
+        ctx = SimpleContext(context or {})
+        ctx.buffer.push()
+        ns = {}
+        _exec_in(mod_code, ns)
+        ns['foo'](ctx)
+        rendered = ctx.buffer.pop()
+
+        self.assertEqual(rendered, content)
 
     def testTag(self):
         self.assertCompiles(
@@ -133,13 +148,13 @@ class TestCompiler(TestCase):
             """
             def func(ctx, foo, bar, baz):
                 ctx.buffer.write('<div class="')
-                ctx.buffer.write_unsafe(foo)
+                ctx.buffer.write_optional_unsafe(foo)
                 ctx.buffer.write('">')
-                ctx.buffer.write_unsafe(bar)
+                ctx.buffer.write_optional_unsafe(bar)
                 ctx.buffer.write('</div>')
                 for i in ctx.result['items']:
                     ctx.buffer.write('<div>')
-                    ctx.buffer.write_unsafe(baz)
+                    ctx.buffer.write_optional_unsafe(baz)
                     ctx.buffer.write('</div>')
             """,
             {'items': ListType[Record[{}]]},
@@ -218,7 +233,7 @@ class TestCompiler(TestCase):
             """,
             """
             ctx.buffer.write('<div class="')
-            ctx.buffer.write_unsafe(('a' if 1 else None))
+            ctx.buffer.write_optional_unsafe(('a' if 1 else None))
             ctx.buffer.write('"></div>')
             """,
         )
@@ -299,7 +314,7 @@ class TestCompiler(TestCase):
             """,
             """
             ctx.buffer.write('<div class="')
-            ctx.buffer.write({})
+            ctx.buffer.write_optional({})
             ctx.buffer.write('"></div>')
             """.format(expr),
             {'foo': Record[{'bar': Option[IntType]}],
@@ -461,26 +476,34 @@ class TestCompiler(TestCase):
         )
 
     def testCompile(self):
-        node = parse("""
-        def foo
-          div
-            each i items
-              div i
-        """)
-        node = check(node, Environ({
-            'items': ListType[Union[StringType, IntType]],
-        }))
-        mod = compile_module(node)
-        mod_code = compile(mod, '<kinko-template>', 'exec')
+        self.assertRenders(
+            """
+            def foo
+              div
+                each i items
+                  div i
+            """,
+            """<div><div>1</div><div>2</div><div>Привет</div></div>""",
+            {
+                'items': [1, 2, "Привет"],
+            },
+            {
+                'items': ListType[Union[StringType, IntType]],
+            },
+        )
 
-        ctx = SimpleContext({'items': [1, 2, "Привет"]})
-        ctx.buffer.push()
-        ns = {}
-        _exec_in(mod_code, ns)
-        ns['foo'](ctx)
-        content = ctx.buffer.pop()
-
-        self.assertEqual(
-            content,
-            "<div><div>1</div><div>2</div><div>Привет</div></div>",
+    def testCompileNone(self):
+        self.assertRenders(
+            """
+            def foo
+              div
+                if bar "true"
+            """,
+            """<div></div>""",
+            {
+                'bar': False,
+            },
+            {
+                'bar': BoolType,
+            },
         )
